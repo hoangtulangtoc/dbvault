@@ -1,0 +1,170 @@
+package dev.dbvault.web.controller;
+
+import java.util.List;
+import java.util.Map;
+import java.util.NoSuchElementException;
+import java.util.UUID;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
+import org.springframework.validation.BindingResult;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ModelAttribute;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.servlet.mvc.support.RedirectAttributes;
+
+import dev.dbvault.application.backup.RunBackupService;
+import dev.dbvault.application.target.ManageDatabaseTargetService;
+import dev.dbvault.application.target.TestTargetConnectionService;
+import dev.dbvault.core.exception.DuplicateTargetNameException;
+import dev.dbvault.core.exception.InvalidTargetException;
+import dev.dbvault.core.exception.TargetInUseException;
+import dev.dbvault.core.model.BackupExecution;
+import dev.dbvault.core.model.ConnectionCheck;
+import dev.dbvault.core.model.DatabaseTarget;
+import dev.dbvault.core.model.ExecutionStatus;
+import dev.dbvault.core.port.BackupExecutionRepository;
+import dev.dbvault.web.dto.DatabaseTargetForm;
+
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+
+/**
+ * Translates HTTP into use case calls and back. No business rules live here.
+ */
+@Controller
+@RequestMapping("/databases")
+@RequiredArgsConstructor
+public class DatabaseTargetController {
+
+    private static final String FORM_VIEW = "database/form";
+
+    /**
+     * Domain field names to form field names. A whitelist, not a guess: a name
+     * that is not listed becomes a form-level error rather than being bound to
+     * an input that may not exist.
+     */
+    private static final Map<String, String> FORM_FIELDS = Map.of(
+            "name", "name",
+            "host", "host",
+            "port", "port",
+            "databaseName", "database",
+            "username", "username",
+            "password", "password");
+
+    private final ManageDatabaseTargetService service;
+    private final TestTargetConnectionService connectionTest;
+    private final RunBackupService backups;
+    private final BackupExecutionRepository executions;
+
+    /**
+     * Beside each target, its newest backup attempt and its newest successful
+     * one — "when was this last backed up?" is the question the page exists to
+     * answer, and a failed attempt must not hide the good copy before it.
+     */
+    @GetMapping
+    String list(Model model) {
+        List<BackupExecution> newestFirst = executions.findAllNewestFirst();
+        model.addAttribute("targets", service.listAll());
+        model.addAttribute("latestBackups", firstPerTarget(newestFirst.stream()));
+        model.addAttribute("lastSuccessfulBackups", firstPerTarget(newestFirst.stream()
+                .filter(e -> e.getStatus() == ExecutionStatus.SUCCEEDED)));
+        return "database/list";
+    }
+
+    @GetMapping("/new")
+    String newForm(Model model) {
+        model.addAttribute("form", DatabaseTargetForm.blank());
+        return FORM_VIEW;
+    }
+
+    @PostMapping
+    String create(
+            @Valid @ModelAttribute("form") DatabaseTargetForm form,
+            BindingResult binding,
+            RedirectAttributes flash) {
+
+        // Re-rendering must not replace the bound `form`: it is what the
+        // operator typed, and losing a filled-in page to one bad field is the
+        // fastest way to make people stop trusting the console.
+        if (binding.hasErrors()) {
+            return FORM_VIEW;
+        }
+        try {
+            DatabaseTarget target = service.register(form.toCommand());
+            flash.addFlashAttribute("message", "Registered target '%s'".formatted(target.getName()));
+            return "redirect:/databases";
+        } catch (DuplicateTargetNameException e) {
+            binding.rejectValue("name", "target.duplicate", e.getMessage());
+            return FORM_VIEW;
+        } catch (InvalidTargetException e) {
+            rejectOnForm(binding, e);
+            return FORM_VIEW;
+        }
+    }
+
+    /**
+     * Runs synchronously: the client is given an explicit connect timeout, so
+     * this is bounded in a way a backup is not. Backups will need the
+     * background treatment; a probe does not.
+     */
+    @PostMapping("/{id}/test")
+    String test(@PathVariable UUID id, RedirectAttributes flash) {
+        try {
+            ConnectionCheck check = connectionTest.test(id);
+            if (check.successful()) {
+                flash.addFlashAttribute("message", "Connection succeeded");
+            } else {
+                flash.addFlashAttribute("error", "Connection failed: " + check.message());
+            }
+        } catch (NoSuchElementException e) {
+            flash.addFlashAttribute("error", "That target no longer exists");
+        }
+        return "redirect:/databases";
+    }
+
+    /**
+     * Returns as soon as the execution row exists, redirecting to its detail
+     * page. The dump itself runs in the background, so a schema that takes
+     * minutes does not hold the request open.
+     */
+    @PostMapping("/{id}/backup")
+    String backUpNow(@PathVariable UUID id, RedirectAttributes flash) {
+        try {
+            return "redirect:/executions/" + backups.start(id);
+        } catch (NoSuchElementException e) {
+            flash.addFlashAttribute("error", "That target no longer exists");
+            return "redirect:/databases";
+        }
+    }
+
+    @PostMapping("/{id}/delete")
+    String delete(@PathVariable UUID id, RedirectAttributes flash) {
+        try {
+            service.delete(id);
+            flash.addFlashAttribute("message", "Target removed");
+        } catch (TargetInUseException e) {
+            flash.addFlashAttribute("error", e.getMessage());
+        }
+        return "redirect:/databases";
+    }
+
+    /** Relies on the repository's newest-first order: the first seen is kept. */
+    private static Map<UUID, BackupExecution> firstPerTarget(Stream<BackupExecution> newestFirst) {
+        return newestFirst.collect(Collectors.toMap(
+                BackupExecution::getTargetId, e -> e, (newer, older) -> newer));
+    }
+
+    private static void rejectOnForm(BindingResult binding, InvalidTargetException e) {
+        String formField = FORM_FIELDS.get(e.getField());
+        if (formField == null) {
+            binding.reject("target.invalid", e.getMessage());
+        } else {
+            binding.rejectValue(formField, "target.invalid", e.getMessage());
+        }
+    }
+}
