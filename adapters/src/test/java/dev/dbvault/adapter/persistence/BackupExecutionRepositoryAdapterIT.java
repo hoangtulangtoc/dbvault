@@ -19,7 +19,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 import dev.dbvault.adapter.TestAdaptersApplication;
 import dev.dbvault.core.exception.TargetInUseException;
 import dev.dbvault.core.model.BackupExecution;
-import dev.dbvault.core.model.BackupStatus;
+import dev.dbvault.core.model.ExecutionStatus;
 import dev.dbvault.core.model.DatabaseTarget;
 import dev.dbvault.core.port.BackupExecutionRepository;
 import dev.dbvault.core.port.DatabaseTargetRepository;
@@ -60,7 +60,7 @@ class BackupExecutionRepositoryAdapterIT {
         BackupExecution saved = executions.save(BackupExecution.started(UUID.randomUUID(), targetId, STARTED));
 
         BackupExecution found = executions.findById(saved.getId()).orElseThrow();
-        assertThat(found.getStatus()).isEqualTo(BackupStatus.RUNNING);
+        assertThat(found.getStatus()).isEqualTo(ExecutionStatus.RUNNING);
         assertThat(found.getTargetId()).isEqualTo(targetId);
         assertThat(found.getStartedAt()).isEqualTo(STARTED);
         assertThat(found.getFinishedAt()).isNull();
@@ -73,7 +73,7 @@ class BackupExecutionRepositoryAdapterIT {
         executions.save(running.succeeded("/backups/shop.sql", 4096L, STARTED.plusSeconds(90)));
 
         BackupExecution found = executions.findById(running.getId()).orElseThrow();
-        assertThat(found.getStatus()).isEqualTo(BackupStatus.SUCCEEDED);
+        assertThat(found.getStatus()).isEqualTo(ExecutionStatus.SUCCEEDED);
         assertThat(found.getArtifactPath()).isEqualTo("/backups/shop.sql");
         assertThat(found.getSizeBytes()).isEqualTo(4096L);
         assertThat(found.getFinishedAt()).isEqualTo(STARTED.plusSeconds(90));
@@ -86,7 +86,7 @@ class BackupExecutionRepositoryAdapterIT {
         executions.save(running.failed("mysqldump exited with 2", STARTED.plusSeconds(3)));
 
         BackupExecution found = executions.findById(running.getId()).orElseThrow();
-        assertThat(found.getStatus()).isEqualTo(BackupStatus.FAILED);
+        assertThat(found.getStatus()).isEqualTo(ExecutionStatus.FAILED);
         assertThat(found.getErrorMessage()).isEqualTo("mysqldump exited with 2");
         assertThat(found.getArtifactPath()).isNull();
     }

@@ -3,7 +3,7 @@ package dev.dbvault.adapter.persistence;
 import java.time.Instant;
 import java.util.UUID;
 
-import dev.dbvault.core.model.BackupStatus;
+import dev.dbvault.core.model.ExecutionStatus;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -32,7 +32,7 @@ class BackupExecutionEntity {
     // silent rewrite of every historical row.
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 16)
-    private BackupStatus status;
+    private ExecutionStatus status;
 
     @Column(name = "started_at", nullable = false)
     private Instant startedAt;

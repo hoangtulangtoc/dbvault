@@ -8,7 +8,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Component;
 
 import dev.dbvault.core.model.BackupExecution;
-import dev.dbvault.core.model.BackupStatus;
+import dev.dbvault.core.model.ExecutionStatus;
 import dev.dbvault.core.port.BackupExecutionRepository;
 
 import lombok.RequiredArgsConstructor;
@@ -38,7 +38,7 @@ class BackupExecutionRepositoryAdapter implements BackupExecutionRepository {
 
     @Override
     public List<BackupExecution> findRunning() {
-        return jpaRepository.findByStatus(BackupStatus.RUNNING).stream()
+        return jpaRepository.findByStatus(ExecutionStatus.RUNNING).stream()
                 .map(BackupExecutionMapper::toDomain)
                 .toList();
     }
