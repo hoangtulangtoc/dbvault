@@ -5,9 +5,9 @@ import java.util.UUID;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 
-import dev.dbvault.core.model.BackupStatus;
+import dev.dbvault.core.model.ExecutionStatus;
 
 interface BackupExecutionJpaRepository extends JpaRepository<BackupExecutionEntity, UUID> {
 
-    List<BackupExecutionEntity> findByStatus(BackupStatus status);
+    List<BackupExecutionEntity> findByStatus(ExecutionStatus status);
 }

@@ -23,10 +23,10 @@ public final class BackupExecution {
 
     private final UUID id;
     private final UUID targetId;
-    private final BackupStatus status;
+    private final ExecutionStatus status;
     private final Instant startedAt;
 
-    /** Null while {@link BackupStatus#RUNNING}, set on every terminal state. */
+    /** Null while {@link ExecutionStatus#RUNNING}, set on every terminal state. */
     private final Instant finishedAt;
 
     /** Where the dump was written. Null unless the backup succeeded. */
@@ -42,7 +42,7 @@ public final class BackupExecution {
     private BackupExecution(
             UUID id,
             UUID targetId,
-            BackupStatus status,
+            ExecutionStatus status,
             Instant startedAt,
             Instant finishedAt,
             String artifactPath,
@@ -70,7 +70,7 @@ public final class BackupExecution {
         return BackupExecution.builder()
                 .id(id)
                 .targetId(targetId)
-                .status(BackupStatus.RUNNING)
+                .status(ExecutionStatus.RUNNING)
                 .startedAt(startedAt)
                 .build();
     }
@@ -80,7 +80,7 @@ public final class BackupExecution {
         return BackupExecution.builder()
                 .id(id)
                 .targetId(targetId)
-                .status(BackupStatus.SUCCEEDED)
+                .status(ExecutionStatus.SUCCEEDED)
                 .startedAt(startedAt)
                 .finishedAt(finishedAt)
                 .artifactPath(artifactPath)
@@ -93,7 +93,7 @@ public final class BackupExecution {
         return BackupExecution.builder()
                 .id(id)
                 .targetId(targetId)
-                .status(BackupStatus.FAILED)
+                .status(ExecutionStatus.FAILED)
                 .startedAt(startedAt)
                 .finishedAt(finishedAt)
                 // A failure with nothing to say is worse than a house message.
