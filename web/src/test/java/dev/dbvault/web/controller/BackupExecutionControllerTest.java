@@ -76,6 +76,25 @@ class BackupExecutionControllerTest {
                 .andExpect(content().string(containsString("2026-09-09 10:00:00 UTC")));
     }
 
+    /**
+     * The regression that only looking at the page revealed. {@code th:replace}
+     * swaps out the {@code <td>} itself, so the badge ended up loose in the
+     * {@code <tr>}: the browser hoisted it above the table and every column
+     * after it shifted left by one. Asserting the text was on the page — which
+     * the other tests do — passed the whole time.
+     */
+    @Test
+    void theStatusBadgeStaysInsideItsOwnTableCell() throws Exception {
+        when(executions.findAllNewestFirst()).thenReturn(List.of(succeeded()));
+        when(targets.listAll()).thenReturn(List.of(target("production")));
+
+        mockMvc.perform(get("/executions"))
+                .andExpect(content().string(containsString(
+                        "<td data-label=\"Status\"><span class=\"badge badge-success\">Succeeded</span></td>")))
+                // Which is also what keeps the size in the size column.
+                .andExpect(content().string(containsString("<td data-label=\"Size\" class=\"mono\">8192 B</td>")));
+    }
+
     /** History outlives the target it refers to; it must still render. */
     @Test
     void showsRemovedWhenTheTargetIsGone() throws Exception {
@@ -97,7 +116,9 @@ class BackupExecutionControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(view().name("execution/detail"))
                 .andExpect(content().string(containsString("/backups/shop_20260909_100000.sql.gz")))
-                .andExpect(content().string(containsString("8192 bytes")));
+                .andExpect(content().string(containsString("8192 bytes")))
+                // Finished: nothing for the page to follow (ADR-010).
+                .andExpect(content().string(containsString("data-live-active=\"false\"")));
     }
 
     @Test
@@ -110,7 +131,11 @@ class BackupExecutionControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(content().string(containsString("still running")))
                 .andExpect(content().string(containsString("Running")))
-                .andExpect(content().string(not(containsString("Why it failed"))));
+                .andExpect(content().string(not(containsString("Why it failed"))))
+                // The page follows the run until it finishes (ADR-010), and
+                // says what to announce when it does.
+                .andExpect(content().string(containsString("data-live-active=\"true\"")))
+                .andExpect(content().string(containsString("data-live-announce=\"Backup running\"")));
     }
 
     /** mysqldump's own output, shown in full rather than summarised. */
