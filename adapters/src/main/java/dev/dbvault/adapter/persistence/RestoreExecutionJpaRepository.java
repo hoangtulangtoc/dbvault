@@ -10,4 +10,8 @@ import dev.dbvault.core.model.ExecutionStatus;
 interface RestoreExecutionJpaRepository extends JpaRepository<RestoreExecutionEntity, UUID> {
 
     List<RestoreExecutionEntity> findByStatus(ExecutionStatus status);
+
+    long countByBackupExecutionId(UUID backupExecutionId);
+
+    void deleteByBackupExecutionId(UUID backupExecutionId);
 }
