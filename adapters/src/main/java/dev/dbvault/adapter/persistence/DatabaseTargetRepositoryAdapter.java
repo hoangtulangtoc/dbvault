@@ -7,8 +7,10 @@ import java.util.UUID;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 import dev.dbvault.core.exception.DuplicateTargetNameException;
+import dev.dbvault.core.model.ConnectionCheck;
 import dev.dbvault.core.model.DatabaseTarget;
 import dev.dbvault.core.port.DatabaseTargetRepository;
 
@@ -61,6 +63,15 @@ class DatabaseTargetRepositoryAdapter implements DatabaseTargetRepository {
     @Override
     public void deleteById(UUID id) {
         jpaRepository.deleteById(id);
+    }
+
+    @Override
+    @Transactional
+    public void recordConnectionCheck(UUID id, ConnectionCheck check) {
+        // A probe against a target deleted in another tab updates no rows.
+        // That is not an error worth failing the request over.
+        jpaRepository.updateConnectionCheck(
+                id, check.successful(), check.message(), check.checkedAt());
     }
 
     /**
