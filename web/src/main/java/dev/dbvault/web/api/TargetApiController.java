@@ -23,14 +23,15 @@ import dev.dbvault.core.port.BackupExecutionRepository;
 import lombok.RequiredArgsConstructor;
 
 /**
- * Read-only JSON for scripts and dbvault-cli: the targets, and the backups of one target.
+ * Read-only JSON for scripts and dbvault-cli: the targets, and the backups of one target. Version 1
+ * of the API lives under {@code /api/v1} (ADR-039).
  *
  * <p>Nothing here is new behaviour: the same use cases the console reads, without the HTML. It
  * leaves out what a script has no business seeing — the stored password ciphertext and the
  * artifact's path on the server's disk.
  */
 @RestController
-@RequestMapping("/api/targets")
+@RequestMapping("/api/v1/targets")
 @RequiredArgsConstructor
 public class TargetApiController {
 

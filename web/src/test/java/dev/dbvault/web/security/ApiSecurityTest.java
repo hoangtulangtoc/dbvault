@@ -1,14 +1,17 @@
 package dev.dbvault.web.security;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
@@ -20,13 +23,18 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import dev.dbvault.application.target.ManageDatabaseTargetService;
+import dev.dbvault.application.verification.RestoreVerificationService;
 import dev.dbvault.core.model.BackupExecution;
 import dev.dbvault.core.model.DatabaseEngine;
 import dev.dbvault.core.model.DatabaseTarget;
+import dev.dbvault.core.model.RestoreVerificationExecution;
 import dev.dbvault.core.port.BackupExecutionRepository;
+import dev.dbvault.core.port.RestoreVerificationExecutionRepository;
+import dev.dbvault.web.api.LegacyApiRedirectController;
 import dev.dbvault.web.api.TargetApiController;
+import dev.dbvault.web.api.VerificationApiController;
 
-@WebMvcTest(TargetApiController.class)
+@WebMvcTest({ TargetApiController.class, VerificationApiController.class, LegacyApiRedirectController.class })
 @Import({ ApiSecurityConfig.class, SecurityConfig.class, OperatorAccountConfig.class })
 @TestPropertySource(properties = {
         "dbvault.operator.username=operator",
@@ -50,6 +58,12 @@ class ApiSecurityTest {
     @MockitoBean
     private BackupExecutionRepository executions;
 
+    @MockitoBean
+    private RestoreVerificationService verification;
+
+    @MockitoBean
+    private RestoreVerificationExecutionRepository verifications;
+
     private static DatabaseTarget shop() {
         return DatabaseTarget.builder().id(SHOP).name("shop").engine(DatabaseEngine.MYSQL).host("db.internal").port(3306)
                 .databaseName("shop").username("backup").passwordCiphertext("ciphertext")
@@ -58,14 +72,14 @@ class ApiSecurityTest {
 
     @Test
     void anAnonymousCallerIsAskedForBasicCredentialsNotRedirected() throws Exception {
-        mockMvc.perform(get("/api/targets"))
+        mockMvc.perform(get("/api/v1/targets"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(header().string("WWW-Authenticate", org.hamcrest.Matchers.startsWith("Basic")));
     }
 
     @Test
     void aWrongPasswordIsRefused() throws Exception {
-        mockMvc.perform(get("/api/targets").with(httpBasic("operator", "wrong")))
+        mockMvc.perform(get("/api/v1/targets").with(httpBasic("operator", "wrong")))
                 .andExpect(status().isUnauthorized());
     }
 
@@ -73,7 +87,7 @@ class ApiSecurityTest {
     void listsTargetsWithoutTheirPassword() throws Exception {
         when(targets.listAll()).thenReturn(List.of(shop()));
 
-        mockMvc.perform(get("/api/targets").with(httpBasic("operator", PASSWORD)))
+        mockMvc.perform(get("/api/v1/targets").with(httpBasic("operator", PASSWORD)))
                 .andExpect(status().isOk())
                 .andExpect(header().doesNotExist("Set-Cookie"))
                 .andExpect(jsonPath("$[0].name").value("shop"))
@@ -91,7 +105,7 @@ class ApiSecurityTest {
         when(targets.listAll()).thenReturn(List.of(shop()));
         when(executions.findAllForTarget(SHOP)).thenReturn(List.of(older, newer));
 
-        mockMvc.perform(get("/api/targets/{id}/backups", SHOP).with(httpBasic("operator", PASSWORD)))
+        mockMvc.perform(get("/api/v1/targets/{id}/backups", SHOP).with(httpBasic("operator", PASSWORD)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(2))
                 .andExpect(jsonPath("$[0].status").value("SUCCEEDED"))
@@ -105,8 +119,62 @@ class ApiSecurityTest {
     void anUnknownTargetIsA404() throws Exception {
         when(targets.listAll()).thenReturn(List.of(shop()));
 
-        mockMvc.perform(get("/api/targets/{id}/backups", UUID.randomUUID()).with(httpBasic("operator", PASSWORD)))
+        mockMvc.perform(get("/api/v1/targets/{id}/backups", UUID.randomUUID()).with(httpBasic("operator", PASSWORD)))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error").exists());
+    }
+
+    @Test
+    void anUnversionedPathIsAPermanentRedirectToVersionOne() throws Exception {
+        mockMvc.perform(get("/api/targets/{id}/backups", SHOP).queryParam("page", "2")
+                        .with(httpBasic("operator", PASSWORD)))
+                .andExpect(status().isPermanentRedirect())
+                .andExpect(header().string("Location", "/api/v1/targets/" + SHOP + "/backups?page=2"))
+                .andExpect(header().string("Deprecation", "true"));
+    }
+
+    @Test
+    void anUnversionedPathStillNeedsCredentials() throws Exception {
+        mockMvc.perform(get("/api/targets")).andExpect(status().isUnauthorized());
+    }
+
+    /** No session and no cookie on this chain, so a script's POST needs no CSRF token. */
+    @Test
+    void startsARestoreVerificationAndSaysWhereToFollowIt() throws Exception {
+        UUID backup = UUID.randomUUID();
+        UUID attempt = UUID.randomUUID();
+        when(verification.start(backup)).thenReturn(attempt);
+        when(verifications.findById(attempt)).thenReturn(Optional.of(
+                RestoreVerificationExecution.started(attempt, backup, CREATED)));
+
+        mockMvc.perform(post("/api/v1/backups/{id}/verifications", backup).with(httpBasic("operator", PASSWORD)))
+                .andExpect(status().isAccepted())
+                .andExpect(header().string("Location", "/api/v1/verifications/" + attempt))
+                .andExpect(header().doesNotExist("Set-Cookie"))
+                .andExpect(jsonPath("$.status").value("RUNNING"))
+                .andExpect(jsonPath("$.backupId").value(backup.toString()));
+    }
+
+    @Test
+    void aVerificationThatCannotStartIsAConflict() throws Exception {
+        when(verification.start(any())).thenThrow(
+                new IllegalStateException("Restore verification is disabled for this deployment"));
+
+        mockMvc.perform(post("/api/v1/backups/{id}/verifications", UUID.randomUUID())
+                        .with(httpBasic("operator", PASSWORD)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error").value("Restore verification is disabled for this deployment"));
+    }
+
+    @Test
+    void anUnknownVerificationIsA404() throws Exception {
+        mockMvc.perform(get("/api/v1/verifications/{id}", UUID.randomUUID()).with(httpBasic("operator", PASSWORD)))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void aVerificationNeedsCredentials() throws Exception {
+        mockMvc.perform(post("/api/v1/backups/{id}/verifications", UUID.randomUUID()))
+                .andExpect(status().isUnauthorized());
     }
 }
