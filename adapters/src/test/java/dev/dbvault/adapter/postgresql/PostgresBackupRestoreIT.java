@@ -91,6 +91,54 @@ class PostgresBackupRestoreIT {
         assertThat(query("shop_source", "SELECT count(*) FROM widgets")).isEqualTo("3");
     }
 
+    /**
+     * The round trip an operator relies on is more than rows in one table: types that pg_dump
+     * writes in their own formats, the objects that hang off a table, and where a sequence had got to.
+     */
+    @Test
+    void roundTripKeepsTypesSequencesIndexesViewsAndForeignKeys() throws Exception {
+        execute("shop_source", """
+                DROP VIEW IF EXISTS order_totals;
+                DROP TABLE IF EXISTS order_lines;
+                DROP TABLE IF EXISTS orders;
+                CREATE TABLE orders (
+                    id bigserial PRIMARY KEY,
+                    placed_at timestamptz NOT NULL,
+                    details jsonb NOT NULL,
+                    receipt bytea);
+                CREATE INDEX orders_placed_at ON orders (placed_at);
+                CREATE TABLE order_lines (
+                    order_id bigint NOT NULL REFERENCES orders(id),
+                    sku text NOT NULL,
+                    price numeric(12, 2) NOT NULL);
+                CREATE VIEW order_totals AS
+                    SELECT order_id, sum(price) AS total FROM order_lines GROUP BY order_id;
+                INSERT INTO orders (placed_at, details, receipt) VALUES
+                    ('2026-10-01 09:30:00+07', '{"channel": "web", "tags": ["gift", "đặc biệt"]}', '\\x00ff10'),
+                    ('2026-10-02 18:05:00+00', '{"channel": "store"}', NULL);
+                INSERT INTO order_lines VALUES (1, 'A-1', 19.99), (1, 'B-2', 0.01), (2, 'C-3', 1234567.89);
+                """);
+        Path artifact = artifacts.resolve("orders.dump");
+
+        backup.dumpTo(target("shop_source"), artifact);
+        restore.restore(target("shop_restore"), artifact);
+
+        assertThat(query("shop_restore", "SELECT string_agg(total::text, ',' ORDER BY order_id) FROM order_totals"))
+                .isEqualTo("20.00,1234567.89");
+        assertThat(query("shop_restore", "SELECT details->'tags'->>1 FROM orders WHERE id = 1")).isEqualTo("đặc biệt");
+        assertThat(query("shop_restore", "SELECT encode(receipt, 'hex') FROM orders WHERE id = 1")).isEqualTo("00ff10");
+        assertThat(query("shop_restore", "SELECT placed_at AT TIME ZONE 'UTC' FROM orders WHERE id = 1"))
+                .isEqualTo("2026-10-01 02:30:00");
+        assertThat(query("shop_restore", "SELECT count(*) FROM pg_indexes WHERE indexname = 'orders_placed_at'"))
+                .isEqualTo("1");
+        assertThat(query("shop_restore",
+                "SELECT count(*) FROM information_schema.table_constraints WHERE table_name = 'order_lines' AND constraint_type = 'FOREIGN KEY'"))
+                .isEqualTo("1");
+        // The next id continues after the restored rows rather than colliding with them.
+        assertThat(query("shop_restore",
+                "INSERT INTO orders (placed_at, details) VALUES (now(), '{}') RETURNING id")).isEqualTo("3");
+    }
+
     private static DatabaseConnection target(String database) {
         return new DatabaseConnection(
                 DatabaseEngine.POSTGRESQL,
