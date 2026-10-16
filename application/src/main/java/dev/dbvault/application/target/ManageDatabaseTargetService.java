@@ -79,8 +79,10 @@ public class ManageDatabaseTargetService {
      */
     public DatabaseTarget register(RegisterTargetCommand command) {
         requireStorageProfile(command.storageProfileId());
+        // The id comes first: the password is sealed under a key derived for this target alone.
+        UUID id = UUID.randomUUID();
         DatabaseTarget target = DatabaseTarget.builder()
-                .id(UUID.randomUUID())
+                .id(id)
                 .name(command.name())
                 .engine(command.engine())
                 .host(command.host())
@@ -88,7 +90,7 @@ public class ManageDatabaseTargetService {
                 .databaseName(command.database())
                 .username(command.username())
                 .storageProfileId(command.storageProfileId())
-                .passwordCiphertext(encryption.encrypt(command.password()))
+                .passwordCiphertext(encryption.encryptFor(id, command.password()))
                 .createdAt(clock.instant())
                 .build();
 
@@ -120,7 +122,7 @@ public class ManageDatabaseTargetService {
                 command.host(),
                 command.port(),
                 command.username(),
-                command.changesPassword() ? encryption.encrypt(command.password()) : null,
+                command.changesPassword() ? encryption.encryptFor(current.getId(), command.password()) : null,
                 command.storageProfileId());
 
         return repository.save(edited);

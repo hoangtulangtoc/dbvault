@@ -1,5 +1,7 @@
 package dev.dbvault.core.port;
 
+import java.util.UUID;
+
 /**
  * Symmetric encryption for secrets held at rest.
  *
@@ -23,4 +25,16 @@ public interface EncryptionPort {
      *         or has been tampered with
      */
     String decrypt(String ciphertext);
+
+    /**
+     * Encrypts a secret that belongs to one owner (a target) under a key derived for that owner
+     * alone, so one owner's key never opens another's secret.
+     */
+    String encryptFor(UUID owner, String plaintext);
+
+    /**
+     * Decrypts what {@link #encryptFor} wrote for this owner. Values written by {@link #encrypt}
+     * before per-owner keys existed are still read.
+     */
+    String decryptFor(UUID owner, String ciphertext);
 }

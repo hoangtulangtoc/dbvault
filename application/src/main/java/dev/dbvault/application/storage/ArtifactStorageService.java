@@ -66,6 +66,8 @@ public class ArtifactStorageService {
         return new ArtifactStorageService(local, noStaging, noS3, noProfiles, new EncryptionPort() {
             @Override public String encrypt(String plaintext) { return plaintext; }
             @Override public String decrypt(String ciphertext) { return ciphertext; }
+            @Override public String encryptFor(UUID owner, String plaintext) { return plaintext; }
+            @Override public String decryptFor(UUID owner, String ciphertext) { return ciphertext; }
         });
     }
 

@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.util.Base64;
+import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -115,5 +116,42 @@ class AesGcmEncryptionAdapterTest {
             key[i] = (byte) i;
         }
         return Base64.getEncoder().encodeToString(key);
+    }
+
+    // --- per-target keys (DBV-16) ---------------------------------------------
+
+    private static final UUID SHOP = UUID.fromString("7d1c0000-0000-4000-8000-000000000001");
+    private static final UUID BILLING = UUID.fromString("7d1c0000-0000-4000-8000-000000000002");
+
+    @Test
+    void aTargetsSecretRoundTripsUnderItsOwnKey() {
+        String sealed = adapter.encryptFor(SHOP, "s3cr3t");
+
+        assertThat(sealed).startsWith(AesGcmEncryptionAdapter.PER_OWNER_PREFIX);
+        assertThat(adapter.decryptFor(SHOP, sealed)).isEqualTo("s3cr3t");
+    }
+
+    @Test
+    void oneTargetsKeyDoesNotOpenAnothersSecret() {
+        String sealed = adapter.encryptFor(SHOP, "s3cr3t");
+
+        assertThatThrownBy(() -> adapter.decryptFor(BILLING, sealed))
+                .isInstanceOf(EncryptionException.class);
+        assertThatThrownBy(() -> adapter.decrypt(sealed.substring(AesGcmEncryptionAdapter.PER_OWNER_PREFIX.length())))
+                .as("nor does the master key itself")
+                .isInstanceOf(EncryptionException.class);
+    }
+
+    @Test
+    void aSecretWrittenBeforePerTargetKeysIsStillRead() {
+        String legacy = adapter.encrypt("s3cr3t");
+
+        assertThat(adapter.decryptFor(SHOP, legacy)).isEqualTo("s3cr3t");
+    }
+
+    @Test
+    void aPerTargetKeyNeedsATarget() {
+        assertThatThrownBy(() -> adapter.encryptFor(null, "s3cr3t"))
+                .isInstanceOf(EncryptionException.class);
     }
 }

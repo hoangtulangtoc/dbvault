@@ -42,7 +42,7 @@ public class TestTargetConnectionService {
                         "No database target with id " + targetId));
 
         ConnectionTestPort.Result result = adapters.connectionTestFor(target.getEngine()).test(
-                DatabaseConnection.to(target, encryption.decrypt(target.getPasswordCiphertext())));
+                DatabaseConnection.to(target, encryption.decryptFor(target.getId(), target.getPasswordCiphertext())));
 
         ConnectionCheck check = result.successful()
                 ? ConnectionCheck.passed(clock.instant())
