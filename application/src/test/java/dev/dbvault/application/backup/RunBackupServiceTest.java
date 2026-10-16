@@ -178,7 +178,7 @@ class RunBackupServiceTest {
         givenTarget();
         givenSaveEchoes();
         when(encryption.decrypt("sealed")).thenReturn("s3cr3t");
-        when(storage.locationFor("shop_20260909_101530.sql.gz")).thenReturn(ARTIFACT);
+        when(storage.locationFor(eq(TARGET_ID), any(), eq("shop_20260909_101530.sql.gz"))).thenReturn(ARTIFACT);
         when(backupEngine.dumpTo(any(), eq(ARTIFACT))).thenReturn(8192L);
         when(storage.sha256Of(ARTIFACT)).thenReturn(SHA256);
 
@@ -193,12 +193,33 @@ class RunBackupServiceTest {
         verify(retention).applyAfterSuccessfulBackup(TARGET_ID);
     }
 
+    /**
+     * Every execution has its own directory, so an existing file means
+     * something is wrong. Truncating it would destroy another backup
+     * (ISSUE-01), and cleaning up after the refusal would too.
+     */
+    @Test
+    void refusesToOverwriteAnArtifactThatIsAlreadyThere() {
+        givenTarget();
+        givenSaveEchoes();
+        when(storage.locationFor(any(), any(), any())).thenReturn(ARTIFACT);
+        when(storage.exists(ARTIFACT)).thenReturn(true);
+
+        runQueuedWork(service.start(TARGET_ID));
+
+        BackupExecution recorded = lastSaved();
+        assertThat(recorded.getStatus()).isEqualTo(ExecutionStatus.FAILED);
+        assertThat(recorded.getErrorMessage()).contains("Refusing to overwrite an existing artifact");
+        verify(backupEngine, never()).dumpTo(any(), any());
+        verify(storage, never()).delete(any());
+    }
+
     @Test
     void retentionFailureDoesNotTurnAGoodBackupIntoAFailure() {
         givenTarget();
         givenSaveEchoes();
         when(encryption.decrypt(any())).thenReturn("s3cr3t");
-        when(storage.locationFor(any())).thenReturn(ARTIFACT);
+        when(storage.locationFor(any(), any(), any())).thenReturn(ARTIFACT);
         when(backupEngine.dumpTo(any(), any())).thenReturn(1L);
         when(storage.sha256Of(ARTIFACT)).thenReturn(SHA256);
         when(retention.applyAfterSuccessfulBackup(TARGET_ID))
@@ -216,7 +237,7 @@ class RunBackupServiceTest {
         givenTarget();
         givenSaveEchoes();
         when(encryption.decrypt(any())).thenReturn("s3cr3t");
-        when(storage.locationFor(any())).thenReturn(ARTIFACT);
+        when(storage.locationFor(any(), any(), any())).thenReturn(ARTIFACT);
         when(backupEngine.dumpTo(any(), any())).thenReturn(1L);
         when(storage.sha256Of(ARTIFACT)).thenReturn(SHA256);
 
@@ -233,7 +254,7 @@ class RunBackupServiceTest {
         givenTarget();
         givenSaveEchoes();
         when(encryption.decrypt(any())).thenReturn("s3cr3t");
-        when(storage.locationFor(any())).thenReturn(ARTIFACT);
+        when(storage.locationFor(any(), any(), any())).thenReturn(ARTIFACT);
         when(backupEngine.dumpTo(any(), any())).thenReturn(1L);
         when(storage.sha256Of(ARTIFACT)).thenThrow(new java.io.UncheckedIOException(
                 new java.io.IOException("Input/output error")));
@@ -250,7 +271,7 @@ class RunBackupServiceTest {
         givenTarget();
         givenSaveEchoes();
         when(encryption.decrypt("sealed")).thenReturn("s3cr3t");
-        when(storage.locationFor(any())).thenReturn(ARTIFACT);
+        when(storage.locationFor(any(), any(), any())).thenReturn(ARTIFACT);
         when(backupEngine.dumpTo(any(), any())).thenReturn(1L);
         when(storage.sha256Of(ARTIFACT)).thenReturn(SHA256);
 
@@ -267,7 +288,7 @@ class RunBackupServiceTest {
         givenTarget();
         givenSaveEchoes();
         when(encryption.decrypt(any())).thenReturn("s3cr3t");
-        when(storage.locationFor(any())).thenReturn(ARTIFACT);
+        when(storage.locationFor(any(), any(), any())).thenReturn(ARTIFACT);
         when(backupEngine.dumpTo(any(), any()))
                 .thenThrow(new BackupFailedException("mysqldump exited with 2: Access denied"));
 
@@ -290,7 +311,7 @@ class RunBackupServiceTest {
         givenTarget();
         givenSaveEchoes();
         when(encryption.decrypt(any())).thenThrow(new IllegalStateException("key rotated"));
-        when(storage.locationFor(any())).thenReturn(ARTIFACT);
+        when(storage.locationFor(any(), any(), any())).thenReturn(ARTIFACT);
 
         runQueuedWork(service.start(TARGET_ID));
 

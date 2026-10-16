@@ -11,7 +11,11 @@
 
 The current last decision is
 [ADR-025](adr/025-s3-storage-profiles-and-local-staging.md), which defines
-provider-neutral artifact references, managed S3 profiles and local staging.
+provider-neutral artifact references, managed S3 profiles and local staging,
+and by
+[ADR-033](adr/033-local-artifacts-live-per-target-and-execution.md), which
+gives every local artifact its own `<target-id>/<execution-id>/` directory so
+two backups can never share a file.
 
 These pages describe the code that exists. When a slice changes the code, it
 changes these files in the same commit.
