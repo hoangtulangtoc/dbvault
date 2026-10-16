@@ -57,6 +57,9 @@ class DatabaseTargetEntity {
     @Column(name = "authentication_database", length = 64)
     private String authenticationDatabase;
 
+    @Column(name = "verify_after_backup", nullable = false)
+    private boolean verifyAfterBackup;
+
     @Column(name = "password_enc", nullable = false, columnDefinition = "text")
     private String passwordEnc;
 

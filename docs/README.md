@@ -17,10 +17,12 @@ provider-neutral artifact references, managed S3 profiles and local staging,
 by
 [ADR-033](adr/033-local-artifacts-live-per-target-and-execution.md), which
 gives every local artifact its own `<target-id>/<execution-id>/` directory so
-two backups can never share a file, and by
+two backups can never share a file, by
 [ADR-028](adr/028-target-scoped-notification-channels.md), which adds reusable
 notification channels and per-target backup/restore event subscriptions with
-best-effort bounded delivery.
+best-effort bounded delivery, and by
+[ADR-029](adr/029-isolated-restore-verification.md), which verifies successful
+backups in disposable databases without changing the backup outcome.
 
 These pages describe the code that exists. When a slice changes the code, it
 changes these files in the same commit.

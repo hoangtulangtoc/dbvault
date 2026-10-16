@@ -53,6 +53,7 @@ public class DatabaseTargetForm {
     @NotBlank(message = "Password is required")
     private String password;
     private UUID storageProfileId;
+    private boolean verifyAfterBackup;
 
     public static DatabaseTargetForm blank() {
         DatabaseTargetForm form = new DatabaseTargetForm();
@@ -63,6 +64,7 @@ public class DatabaseTargetForm {
 
     public RegisterTargetCommand toCommand() {
         return new RegisterTargetCommand(
-                name, engine, host, port, database, username, password, authenticationDatabase, storageProfileId);
+                name, engine, host, port, database, username, password, authenticationDatabase,
+                storageProfileId, verifyAfterBackup);
     }
 }

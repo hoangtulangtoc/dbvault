@@ -21,4 +21,9 @@ public enum DatabaseEngine {
     public int defaultPort() {
         return defaultPort;
     }
+
+    /** Every engine dbvault backs up can be restored into a throwaway server and checked. */
+    public boolean supportsRestoreVerification() {
+        return true;
+    }
 }

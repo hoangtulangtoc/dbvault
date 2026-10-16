@@ -134,6 +134,17 @@ dbvault:
     # every statement, not just reading pages.
     timeout: ${RESTORE_TIMEOUT:60m}
 
+  verification:
+    # Opt-in because the adapters control throwaway containers through the
+    # host Docker socket.
+    enabled: ${DBVAULT_VERIFICATION_ENABLED:false}
+    mysql-image: ${DBVAULT_VERIFICATION_MYSQL_IMAGE:mysql:8.4}
+    postgresql-image: ${DBVAULT_VERIFICATION_POSTGRESQL_IMAGE:postgres:17-alpine}
+    mongodb-image: ${DBVAULT_VERIFICATION_MONGODB_IMAGE:mongo:8.0}
+    pull-timeout: ${DBVAULT_VERIFICATION_PULL_TIMEOUT:10m}
+    startup-timeout: ${DBVAULT_VERIFICATION_STARTUP_TIMEOUT:2m}
+    cleanup-timeout: ${DBVAULT_VERIFICATION_CLEANUP_TIMEOUT:30s}
+
   storage:
     local:
       root: ${BACKUP_DIR:./backups}

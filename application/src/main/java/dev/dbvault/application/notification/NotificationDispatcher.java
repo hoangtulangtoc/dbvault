@@ -18,6 +18,7 @@ import dev.dbvault.core.model.NotificationChannelType;
 import dev.dbvault.core.model.NotificationEventType;
 import dev.dbvault.core.model.NotificationMessage;
 import dev.dbvault.core.model.RestoreExecution;
+import dev.dbvault.core.model.RestoreVerificationExecution;
 import dev.dbvault.core.port.NotificationChannelRepository;
 import dev.dbvault.core.port.NotificationPort;
 import dev.dbvault.core.port.TargetNotificationSubscriptionRepository;
@@ -64,6 +65,14 @@ public class NotificationDispatcher {
                 source.getId(), source.getName(), source.getEngine(),
                 destination.getId(), destination.getName(), destination.getEngine(),
                 execution.getBackupExecutionId(), execution.getId(), execution.getStatus().name(),
+                sanitize(execution.getErrorMessage()), null, null));
+    }
+
+    public void publishVerification(DatabaseTarget source, RestoreVerificationExecution execution,
+            NotificationEventType event) {
+        publish(source.getId(), new NotificationMessage(event, clock.instant(),
+                source.getId(), source.getName(), source.getEngine(), null, null, null,
+                execution.getBackupExecutionId(), null, execution.getId(), execution.getStatus().name(),
                 sanitize(execution.getErrorMessage()), null, null));
     }
 

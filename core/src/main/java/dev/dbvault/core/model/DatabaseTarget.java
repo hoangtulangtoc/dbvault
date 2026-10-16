@@ -33,6 +33,7 @@ public final class DatabaseTarget {
     private final String authenticationDatabase;
     /** Null selects the built-in local filesystem destination. */
     private final UUID storageProfileId;
+    private final boolean verifyAfterBackup;
 
     /**
      * The target's password, AES-256-GCM encrypted, Base64 encoded.
@@ -66,6 +67,7 @@ public final class DatabaseTarget {
             String username,
             String authenticationDatabase,
             UUID storageProfileId,
+            boolean verifyAfterBackup,
             String passwordCiphertext,
             Instant createdAt,
             ConnectionCheck lastConnectionCheck) {
@@ -79,6 +81,12 @@ public final class DatabaseTarget {
         this.username = text(username, "username", "Username", usernameLimit(engine));
         this.authenticationDatabase = authenticationDatabase(engine, authenticationDatabase);
         this.storageProfileId = storageProfileId;
+        this.verifyAfterBackup = verifyAfterBackup;
+        if (verifyAfterBackup && !engine.supportsRestoreVerification()) {
+            throw new InvalidTargetException(
+                    "verifyAfterBackup", "Automatic restore verification is not supported for "
+                            + engine.displayName());
+        }
         this.passwordCiphertext = require(passwordCiphertext, "passwordCiphertext", "Password is required");
         this.createdAt = require(createdAt, "createdAt", "Creation timestamp is required");
         this.lastConnectionCheck = lastConnectionCheck; // absent until the target is first tested
@@ -107,7 +115,8 @@ public final class DatabaseTarget {
             String username,
             String authenticationDatabase,
             String newPasswordCiphertext,
-            UUID storageProfileId) {
+            UUID storageProfileId,
+            boolean verifyAfterBackup) {
 
         // Built before comparing, so the comparison sees the values as the
         // constructor normalises them — " db " and "db" are the same host.
@@ -118,6 +127,7 @@ public final class DatabaseTarget {
                 .username(username)
                 .authenticationDatabase(authenticationDatabase)
                 .storageProfileId(storageProfileId)
+                .verifyAfterBackup(verifyAfterBackup)
                 .passwordCiphertext(newPasswordCiphertext != null ? newPasswordCiphertext : passwordCiphertext)
                 .build();
 
@@ -127,6 +137,19 @@ public final class DatabaseTarget {
                 || !edited.username.equals(this.username)
                 || !java.util.Objects.equals(edited.authenticationDatabase, this.authenticationDatabase);
         return connectionChanged ? edited.toBuilder().lastConnectionCheck(null).build() : edited;
+    }
+
+    /** An edit that leaves automatic restore verification as it is. */
+    public DatabaseTarget edited(
+            String name,
+            String host,
+            int port,
+            String username,
+            String authenticationDatabase,
+            String newPasswordCiphertext,
+            UUID storageProfileId) {
+        return edited(name, host, port, username, authenticationDatabase, newPasswordCiphertext,
+                storageProfileId, verifyAfterBackup);
     }
 
     /** An edit that leaves the storage destination where it is. */

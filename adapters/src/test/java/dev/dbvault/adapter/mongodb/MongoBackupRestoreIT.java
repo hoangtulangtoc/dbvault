@@ -1,9 +1,13 @@
 package dev.dbvault.adapter.mongodb;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.nio.file.Path;
 import java.time.Duration;
+import java.time.Instant;
+import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.BeforeAll;
@@ -15,8 +19,10 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 import dev.dbvault.adapter.process.ProcessRunner;
+import dev.dbvault.adapter.verification.DockerVerificationSupport;
 import dev.dbvault.core.model.DatabaseConnection;
 import dev.dbvault.core.model.DatabaseEngine;
+import dev.dbvault.core.model.DatabaseTarget;
 
 /** Real MongoDB plus the same host Database Tools used in production. */
 @Testcontainers
@@ -50,21 +56,44 @@ class MongoBackupRestoreIT {
         // finish before authentication is ready, depending on where Docker
         // sends the temporary server's logs. Probe the actual contract.
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);
-        org.testcontainers.containers.Container.ExecResult result;
+        long readySince = 0;
+        boolean stablyReady = false;
+        org.testcontainers.containers.Container.ExecResult result = null;
+        String lastProblem = "MongoDB did not become ready";
         do {
-            result = MONGO.execInContainer(
-                    "mongosh", "--quiet", "mongodb://127.0.0.1:27017/admin",
-                    "--username", USERNAME,
-                    "--password", PASSWORD,
-                    "--authenticationDatabase", "admin",
-                    "--eval", "db.runCommand({ping: 1})");
-            if (result.getExitCode() == 0) {
-                return;
+            try {
+                result = MONGO.execInContainer(
+                        "mongosh", "--quiet", "mongodb://127.0.0.1:27017/admin",
+                        "--username", USERNAME,
+                        "--password", PASSWORD,
+                        "--authenticationDatabase", "admin",
+                        "--eval", "db.runCommand({ping: 1})");
+                lastProblem = result.getStderr();
+            } catch (RuntimeException bootstrapRestart) {
+                // The official image stops its bootstrap mongod before the
+                // authenticated final server starts. Docker reports 409 if a
+                // probe lands in that short no-process window; it is not a
+                // failed readiness contract yet.
+                result = null;
+                lastProblem = bootstrapRestart.getMessage();
+            }
+            if (result != null && result.getExitCode() == 0) {
+                if (readySince == 0) {
+                    readySince = System.nanoTime();
+                } else if (System.nanoTime() - readySince >= TimeUnit.SECONDS.toNanos(2)) {
+                    stablyReady = true;
+                    break;
+                }
+            } else {
+                // The temporary bootstrap server can accept one authenticated
+                // command immediately before it shuts down. Only a continuous
+                // ready window proves that the final server is running.
+                readySince = 0;
             }
             Thread.sleep(250);
         } while (System.nanoTime() < deadline);
 
-        assertThat(result.getExitCode()).as(result.getStderr()).isZero();
+        assertThat(stablyReady).as(lastProblem).isTrue();
     }
 
     @BeforeEach
@@ -110,6 +139,38 @@ class MongoBackupRestoreIT {
         assertThat(eval("shop_source", "db.widgets.countDocuments({})")).endsWith("3");
     }
 
+    @Test
+    void verifiesARealBackupInADisposableMongoContainerAndRemovesIt() {
+        Path artifact = artifacts.resolve("shop.archive.gz");
+        backup.dumpTo(target("shop_source"), artifact);
+        UUID verificationId = UUID.randomUUID();
+        DockerVerificationSupport docker = dockerSupport();
+
+        var result = new MongoRestoreVerificationAdapter(
+                docker, true, "mongo:8.0", Duration.ofMinutes(2))
+                .verify(verificationId, sourceTarget(), artifact);
+
+        assertThat(result.checkedObjects()).isEqualTo(1);
+        assertThat(docker.success(List.of("docker", "inspect",
+                DockerVerificationSupport.containerName(DatabaseEngine.MONGODB, verificationId)),
+                Duration.ofSeconds(10))).isFalse();
+
+        UUID corruptId = UUID.randomUUID();
+        Path corrupt = artifacts.resolve("corrupt-verification.archive.gz");
+        try {
+            java.nio.file.Files.writeString(corrupt, "not a mongo archive");
+        } catch (java.io.IOException e) {
+            throw new AssertionError(e);
+        }
+        assertThatThrownBy(() -> new MongoRestoreVerificationAdapter(
+                docker, true, "mongo:8.0", Duration.ofMinutes(2))
+                .verify(corruptId, sourceTarget(), corrupt))
+                .hasMessageContaining("mongorestore failed");
+        assertThat(docker.success(List.of("docker", "inspect",
+                DockerVerificationSupport.containerName(DatabaseEngine.MONGODB, corruptId)),
+                Duration.ofSeconds(10))).isFalse();
+    }
+
     private static DatabaseConnection target(String database) {
         return new DatabaseConnection(
                 DatabaseEngine.MONGODB,
@@ -119,6 +180,17 @@ class MongoBackupRestoreIT {
                 USERNAME,
                 PASSWORD,
                 "admin");
+    }
+
+    private static DatabaseTarget sourceTarget() {
+        return DatabaseTarget.builder().id(UUID.randomUUID()).name("source").engine(DatabaseEngine.MONGODB)
+                .host("unused").port(27017).databaseName("shop_source").username("unused")
+                .authenticationDatabase("admin").passwordCiphertext("unused").createdAt(Instant.EPOCH).build();
+    }
+
+    private static DockerVerificationSupport dockerSupport() {
+        return new DockerVerificationSupport(new ProcessRunner(), Duration.ofMinutes(10),
+                Duration.ofMinutes(2), Duration.ofSeconds(30));
     }
 
     private static String eval(String database, String javascript) throws Exception {

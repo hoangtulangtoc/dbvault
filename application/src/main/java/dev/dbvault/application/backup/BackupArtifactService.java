@@ -21,6 +21,7 @@ import dev.dbvault.core.model.ExecutionStatus;
 import dev.dbvault.core.model.RestoreExecution;
 import dev.dbvault.core.port.BackupExecutionRepository;
 import dev.dbvault.core.port.RestoreExecutionRepository;
+import dev.dbvault.core.port.RestoreVerificationExecutionRepository;
 import dev.dbvault.application.storage.ArtifactStorageService;
 import dev.dbvault.core.model.ArtifactReference;
 
@@ -103,17 +104,23 @@ public class BackupArtifactService {
 
     private final BackupExecutionRepository backups;
     private final RestoreExecutionRepository restores;
+    private final RestoreVerificationExecutionRepository verifications;
     private final ArtifactStorageService storage;
 
     @Autowired
     public BackupArtifactService(BackupExecutionRepository backups, RestoreExecutionRepository restores,
+            RestoreVerificationExecutionRepository verifications, ArtifactStorageService storage) {
+        this.backups = backups; this.restores = restores; this.verifications = verifications; this.storage = storage;
+    }
+
+    public BackupArtifactService(BackupExecutionRepository backups, RestoreExecutionRepository restores,
             ArtifactStorageService storage) {
-        this.backups = backups; this.restores = restores; this.storage = storage;
+        this(backups, restores, noVerifications(), storage);
     }
 
     public BackupArtifactService(BackupExecutionRepository backups, RestoreExecutionRepository restores,
             dev.dbvault.core.port.StoragePort storage) {
-        this(backups, restores, ArtifactStorageService.localOnly(storage));
+        this(backups, restores, noVerifications(), ArtifactStorageService.localOnly(storage));
     }
 
     /**
@@ -251,7 +258,8 @@ public class BackupArtifactService {
             return RetentionDeletion.ALREADY_GONE;
         }
         if (execution.getStatus() != ExecutionStatus.SUCCEEDED
-                || restores.countForBackup(executionId) > 0) {
+                || restores.countForBackup(executionId) > 0
+                || verifications.existsRunningForBackup(executionId)) {
             return RetentionDeletion.PROTECTED;
         }
         if (execution.getArtifactLocator() != null) {
@@ -296,7 +304,28 @@ public class BackupArtifactService {
         if (executions.stream().anyMatch(e -> beingRestored.contains(e.getId()))) {
             return which + " is being restored right now. Wait for the restore to finish before deleting it.";
         }
+        if (executions.stream().anyMatch(e -> verifications.existsRunningForBackup(e.getId()))) {
+            return which + " is being restore-verified right now. Wait for verification to finish before deleting it.";
+        }
         return null;
+    }
+
+    private static RestoreVerificationExecutionRepository noVerifications() {
+        return new RestoreVerificationExecutionRepository() {
+            @Override public dev.dbvault.core.model.RestoreVerificationExecution save(
+                    dev.dbvault.core.model.RestoreVerificationExecution value) {
+                throw new UnsupportedOperationException();
+            }
+            @Override public java.util.Optional<dev.dbvault.core.model.RestoreVerificationExecution>
+                    findById(UUID id) { return java.util.Optional.empty(); }
+            @Override public java.util.List<dev.dbvault.core.model.RestoreVerificationExecution>
+                    findForBackupNewestFirst(UUID id) { return java.util.List.of(); }
+            @Override public java.util.Optional<dev.dbvault.core.model.RestoreVerificationExecution>
+                    findLatestForBackup(UUID id) { return java.util.Optional.empty(); }
+            @Override public java.util.List<dev.dbvault.core.model.RestoreVerificationExecution>
+                    findRunning() { return java.util.List.of(); }
+            @Override public boolean existsRunningForBackup(UUID id) { return false; }
+        };
     }
 
     private BackupExecution require(UUID executionId) {
