@@ -22,7 +22,6 @@ import org.springframework.test.web.servlet.MockMvc;
 import dev.dbvault.application.target.ManageDatabaseTargetService;
 import dev.dbvault.core.model.BackupExecution;
 import dev.dbvault.core.model.DatabaseTarget;
-import dev.dbvault.core.port.HistoryPage;
 import dev.dbvault.core.port.BackupExecutionRepository;
 import dev.dbvault.web.api.TargetApiController;
 
@@ -83,14 +82,12 @@ class ApiSecurityTest {
 
     @Test
     void listsOneTargetsBackupsNewestFirstWithoutTheirPath() throws Exception {
-        UUID other = UUID.randomUUID();
         BackupExecution newer = BackupExecution.started(UUID.randomUUID(), SHOP, CREATED.plusSeconds(120))
                 .succeeded("/backups/shop.sql.gz", 2048, SHA256, CREATED.plusSeconds(130));
-        BackupExecution foreign = BackupExecution.started(UUID.randomUUID(), other, CREATED.plusSeconds(90));
         BackupExecution older = BackupExecution.started(UUID.randomUUID(), SHOP, CREATED.plusSeconds(60))
                 .failed("Access denied", CREATED.plusSeconds(61));
         when(targets.listAll()).thenReturn(List.of(shop()));
-        when(executions.findNewestFirst(1, 100)).thenReturn(new HistoryPage<>(List.of(newer, foreign, older), 1, false));
+        when(executions.findAllForTarget(SHOP)).thenReturn(List.of(older, newer));
 
         mockMvc.perform(get("/api/targets/{id}/backups", SHOP).with(httpBasic("operator", PASSWORD)))
                 .andExpect(status().isOk())

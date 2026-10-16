@@ -1,7 +1,7 @@
 package dev.dbvault.web.api;
 
 import java.time.Instant;
-import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
@@ -18,7 +18,6 @@ import org.springframework.web.bind.annotation.RestController;
 import dev.dbvault.application.target.ManageDatabaseTargetService;
 import dev.dbvault.core.model.BackupExecution;
 import dev.dbvault.core.model.DatabaseTarget;
-import dev.dbvault.core.port.HistoryPage;
 import dev.dbvault.core.port.BackupExecutionRepository;
 
 import lombok.RequiredArgsConstructor;
@@ -35,8 +34,6 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class TargetApiController {
 
-    private static final int PAGE_SIZE = 100;
-
     private final ManageDatabaseTargetService targets;
     private final BackupExecutionRepository executions;
 
@@ -50,17 +47,10 @@ public class TargetApiController {
         if (targets.listAll().stream().noneMatch(target -> target.getId().equals(id))) {
             throw new NoSuchElementException("No target with id " + id);
         }
-        List<BackupView> found = new ArrayList<>();
-        HistoryPage<BackupExecution> page;
-        int number = 1;
-        do {
-            page = executions.findNewestFirst(number++, PAGE_SIZE);
-            page.items().stream()
-                    .filter(execution -> execution.getTargetId().equals(id))
-                    .map(BackupView::of)
-                    .forEach(found::add);
-        } while (page.hasOlder());
-        return found;
+        return executions.findAllForTarget(id).stream()
+                .sorted(Comparator.comparing(BackupExecution::getStartedAt).reversed())
+                .map(BackupView::of)
+                .toList();
     }
 
     @ExceptionHandler(NoSuchElementException.class)
