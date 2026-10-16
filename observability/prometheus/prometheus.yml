@@ -1,0 +1,14 @@
+# Scrapes dbvault's backup metrics (DBV-30). The scrape signs in with the operator account over HTTP
+# Basic, like dbvault-cli; the password is read from a file the operator writes, never from here:
+#   printf '%s' 'the-console-password' > observability/prometheus/dbvault-password
+global:
+  scrape_interval: 30s
+
+scrape_configs:
+  - job_name: dbvault
+    metrics_path: /actuator/prometheus
+    basic_auth:
+      username: admin
+      password_file: /etc/prometheus/dbvault-password
+    static_configs:
+      - targets: ["app:8080"]

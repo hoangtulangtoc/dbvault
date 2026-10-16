@@ -25,3 +25,5 @@ backups/
 # Never commit a real encryption key or datasource password.
 .env
 .env.local
+/observability/prometheus/dbvault-password
+/observability/grafana/admin-password

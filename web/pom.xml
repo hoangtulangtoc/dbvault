@@ -50,6 +50,11 @@
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-actuator</artifactId>
     </dependency>
+    <!-- /actuator/prometheus for the backup metrics (DBV-30). -->
+    <dependency>
+      <groupId>io.micrometer</groupId>
+      <artifactId>micrometer-registry-prometheus</artifactId>
+    </dependency>
     <!-- Recurring backup triggers. Persistent schedule definitions remain in
          our own domain table and are reconciled into Quartz at startup. -->
     <dependency>

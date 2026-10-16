@@ -26,7 +26,8 @@ public class ApiSecurityConfig {
     @Order(1)
     SecurityFilterChain apiSecurity(HttpSecurity http) throws Exception {
         http
-                .securityMatcher("/api/**")
+                // The Prometheus scrape is a script too: same credentials, same rules.
+                .securityMatcher("/api/**", "/actuator/prometheus")
                 .authorizeHttpRequests(requests -> requests.anyRequest().authenticated())
                 .httpBasic(Customizer.withDefaults())
                 .csrf(AbstractHttpConfigurer::disable)

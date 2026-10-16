@@ -97,6 +97,21 @@ override the three images and the pull, startup and cleanup timeouts with the
 `DBVAULT_VERIFICATION_*` variables listed in `docker-compose.yml`. See
 [ADR-029](adr/029-isolated-restore-verification.md).
 
+**Metrics are a scrape away, monitoring is optional.** `/actuator/prometheus`
+serves dbvault's backup metrics to anything that signs in with the operator
+account over HTTP Basic, like dbvault-cli. One series per target, tagged with
+its name and engine: `dbvault_backup_last_success_timestamp_seconds`,
+`dbvault_backup_last_duration_seconds` and `dbvault_backup_last_size_bytes` of
+its newest successful backup, and `dbvault_backup_failures_24h`. They are read
+from the execution history every 30 seconds, so they survive a restart. The
+`observability` compose profile adds Prometheus and Grafana with a provisioned
+"dbvault backups" dashboard; write the two password files first
+(`observability/prometheus/dbvault-password`, the console password, and
+`observability/grafana/admin-password`), then
+`docker compose --profile observability up -d`. Neither service publishes a
+port; map Grafana's 3000 in an override file to open it. See
+[ADR-040](adr/040-backup-metrics-come-from-the-execution-history.md).
+
 **Schedules use the application's clock and one explicit zone each.** Cron
 expressions use Quartz syntax, with seconds as the first field. The schedule
 row persists in metadata PostgreSQL and its in-memory Quartz trigger is rebuilt

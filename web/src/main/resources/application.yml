@@ -69,10 +69,11 @@ management:
       enabled: false
   endpoints:
     web:
-      # The healthcheck's endpoint and nothing else. It is reachable without
-      # signing in, so it says UP or DOWN and never why.
+      # The healthcheck's endpoint, reachable without signing in, so it says UP
+      # or DOWN and never why; and the Prometheus scrape, which needs the
+      # operator's credentials (ApiSecurityConfig).
       exposure:
-        include: health
+        include: health,prometheus
   endpoint:
     health:
       show-details: never
