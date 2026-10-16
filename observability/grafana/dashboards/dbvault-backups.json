@@ -1,0 +1,199 @@
+{
+  "uid": "dbvault-backups",
+  "title": "dbvault backups",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": false,
+  "time": {
+    "from": "now-7d",
+    "to": "now"
+  },
+  "refresh": "1m",
+  "tags": [
+    "dbvault"
+  ],
+  "panels": [
+    {
+      "id": 1,
+      "title": "Failed backups, last 24 hours",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dbvault-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 6,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dbvault-prometheus"
+          },
+          "expr": "sum(dbvault_backup_failures_24h)",
+          "legendFormat": ""
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "background"
+      }
+    },
+    {
+      "id": 2,
+      "title": "Time since the last successful backup",
+      "type": "table",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dbvault-prometheus"
+      },
+      "gridPos": {
+        "x": 6,
+        "y": 0,
+        "w": 18,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dbvault-prometheus"
+          },
+          "expr": "time() - dbvault_backup_last_success_timestamp_seconds",
+          "format": "table",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 3,
+      "title": "Backup duration per target",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dbvault-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 5,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dbvault-prometheus"
+          },
+          "expr": "dbvault_backup_last_duration_seconds",
+          "legendFormat": "{{target}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 4,
+      "title": "Backup size per target",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dbvault-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 5,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dbvault-prometheus"
+          },
+          "expr": "dbvault_backup_last_size_bytes",
+          "legendFormat": "{{target}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 5,
+      "title": "Failed backups per target, last 24 hours",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "dbvault-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 13,
+        "w": 24,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "dbvault-prometheus"
+          },
+          "expr": "dbvault_backup_failures_24h",
+          "legendFormat": "{{target}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      }
+    }
+  ]
+}
