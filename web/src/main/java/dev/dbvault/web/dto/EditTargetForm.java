@@ -1,5 +1,7 @@
 package dev.dbvault.web.dto;
 
+import java.util.UUID;
+
 import dev.dbvault.application.target.EditTargetCommand;
 import dev.dbvault.core.model.DatabaseTarget;
 
@@ -40,6 +42,7 @@ public class EditTargetForm {
 
     /** Blank keeps the stored password. */
     private String password;
+    private UUID storageProfileId;
 
     /** Pre-filled from the target, all but the password. */
     public static EditTargetForm of(DatabaseTarget target) {
@@ -48,10 +51,11 @@ public class EditTargetForm {
         form.setHost(target.getHost());
         form.setPort(target.getPort());
         form.setUsername(target.getUsername());
+        form.setStorageProfileId(target.getStorageProfileId());
         return form;
     }
 
     public EditTargetCommand toCommand() {
-        return new EditTargetCommand(name, host, port, username, password);
+        return new EditTargetCommand(name, host, port, username, password, storageProfileId);
     }
 }

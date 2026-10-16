@@ -20,6 +20,7 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import dev.dbvault.application.backup.RunBackupService;
 import dev.dbvault.application.target.ManageDatabaseTargetService;
 import dev.dbvault.application.target.TestTargetConnectionService;
+import dev.dbvault.application.storage.ManageStorageProfileService;
 import dev.dbvault.core.exception.DuplicateTargetNameException;
 import dev.dbvault.core.exception.InvalidTargetException;
 import dev.dbvault.core.exception.TargetInUseException;
@@ -56,16 +57,23 @@ public class DatabaseTargetController {
             "port", "port",
             "databaseName", "database",
             "username", "username",
-            "password", "password");
+            "password", "password",
+            "storageProfileId", "storageProfileId");
 
     private final ManageDatabaseTargetService service;
     private final TestTargetConnectionService connectionTest;
     private final RunBackupService backups;
     private final BackupExecutionRepository executions;
+    private final ManageStorageProfileService storageProfiles;
 
     @ModelAttribute("engines")
     DatabaseEngine[] engines() {
         return DatabaseEngine.values();
+    }
+
+    @ModelAttribute("storageProfiles")
+    Object storageProfiles() {
+        return storageProfiles.listAll();
     }
 
     /**
@@ -80,6 +88,8 @@ public class DatabaseTargetController {
         model.addAttribute("targets", service.listAll());
         model.addAttribute("latestBackups", byTarget(executions.findLatestPerTarget()));
         model.addAttribute("lastSuccessfulBackups", byTarget(executions.findLatestSucceededPerTarget()));
+        model.addAttribute("storageProfileNames", storageProfiles.listAll().stream()
+                .collect(Collectors.toMap(p -> p.getId(), p -> p.getName())));
         return "database/list";
     }
 

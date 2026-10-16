@@ -20,6 +20,7 @@ import java.util.NoSuchElementException;
 import java.util.List;
 import java.util.UUID;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -36,6 +37,7 @@ import dev.dbvault.application.target.ManageDatabaseTargetService;
 import dev.dbvault.application.target.ManageDatabaseTargetService.TargetRemovalPreview;
 import dev.dbvault.application.target.RegisterTargetCommand;
 import dev.dbvault.application.target.TestTargetConnectionService;
+import dev.dbvault.application.storage.ManageStorageProfileService;
 import dev.dbvault.core.exception.DuplicateTargetNameException;
 import dev.dbvault.core.exception.TargetInUseException;
 import dev.dbvault.core.model.BackupExecution;
@@ -69,6 +71,14 @@ class DatabaseTargetControllerTest {
 
     @MockitoBean
     private BackupExecutionRepository executions;
+
+    @MockitoBean
+    private ManageStorageProfileService storageProfiles;
+
+    @BeforeEach
+    void noStorageProfilesYet() {
+        when(storageProfiles.listAll()).thenReturn(List.of());
+    }
 
     @Test
     void listsTargets() throws Exception {

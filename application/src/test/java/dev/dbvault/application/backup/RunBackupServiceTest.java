@@ -115,6 +115,18 @@ class RunBackupServiceTest {
         assertThat(saved.getValue().getTargetId()).isEqualTo(TARGET_ID);
     }
 
+    @Test
+    void snapshotsTheTargetsCurrentStorageProfileWhenTheJobIsAccepted() {
+        UUID profileId = UUID.randomUUID();
+        when(targets.findById(TARGET_ID)).thenReturn(Optional.of(target("shop", profileId)));
+        givenSaveEchoes();
+
+        service.start(TARGET_ID);
+
+        verify(executions).save(saved.capture());
+        assertThat(saved.getValue().getStorageProfileId()).isEqualTo(profileId);
+    }
+
     /** The password is not carried through the queue; it is unwrapped when used. */
     @Test
     void doesNotDecryptWhileMerelyAcceptingTheBackup() {
@@ -355,6 +367,10 @@ class RunBackupServiceTest {
     }
 
     private static DatabaseTarget target(String schema) {
+        return target(schema, null);
+    }
+
+    private static DatabaseTarget target(String schema, UUID storageProfileId) {
         return DatabaseTarget.builder().engine(dev.dbvault.core.model.DatabaseEngine.MYSQL)
                 .id(TARGET_ID)
                 .name("production")
@@ -363,6 +379,7 @@ class RunBackupServiceTest {
                 .databaseName(schema)
                 .username("backup")
                 .passwordCiphertext("sealed")
+                .storageProfileId(storageProfileId)
                 .createdAt(NOW)
                 .build();
     }

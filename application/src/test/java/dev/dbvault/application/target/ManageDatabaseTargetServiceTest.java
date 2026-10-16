@@ -36,6 +36,7 @@ import dev.dbvault.core.port.BackupExecutionRepository;
 import dev.dbvault.core.port.BackupScheduleRepository;
 import dev.dbvault.core.port.DatabaseTargetRepository;
 import dev.dbvault.core.port.EncryptionPort;
+import dev.dbvault.core.port.StorageProfileRepository;
 import dev.dbvault.core.port.RestoreExecutionRepository;
 
 /**
@@ -66,6 +67,9 @@ class ManageDatabaseTargetServiceTest {
     @Mock
     private EncryptionPort encryption;
 
+    @Mock
+    private StorageProfileRepository storageProfiles;
+
     @Captor
     private ArgumentCaptor<DatabaseTarget> savedTarget;
 
@@ -74,7 +78,8 @@ class ManageDatabaseTargetServiceTest {
     @BeforeEach
     void setUp() {
         service = new ManageDatabaseTargetService(
-                repository, backups, restores, schedules, artifacts, encryption, Clock.fixed(NOW, ZoneOffset.UTC));
+                repository, backups, restores, schedules, artifacts, encryption, Clock.fixed(NOW, ZoneOffset.UTC),
+                storageProfiles);
     }
 
     @Test

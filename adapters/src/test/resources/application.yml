@@ -20,6 +20,8 @@ dbvault:
   storage:
     local:
       root: ${java.io.tmpdir}/dbvault-it
+    staging:
+      root: ${java.io.tmpdir}/dbvault-it-staging
 
   encryption:
     key: ZGJiYWNrdXAtaW50ZWdyYXRpb24tdGVzdC1rZXktMzI=
