@@ -62,10 +62,25 @@ public final class NotificationChannel {
 
     private static String email(String value) {
         String candidate = text(value, "Email recipient", 255);
-        if (!candidate.matches("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")) {
+        if (!looksLikeAnEmailAddress(candidate)) {
             throw new IllegalArgumentException("Email recipient is not valid");
         }
         return candidate;
+    }
+
+    /**
+     * One {@code @} between a local part and a domain that has a dot with something on both
+     * sides, and no whitespace. Checked by hand rather than with a regex: the pattern this
+     * replaces backtracked polynomially on a long input without a dot.
+     */
+    private static boolean looksLikeAnEmailAddress(String value) {
+        int at = value.indexOf('@');
+        if (at <= 0 || at != value.lastIndexOf('@') || value.chars().anyMatch(Character::isWhitespace)) {
+            return false;
+        }
+        String domain = value.substring(at + 1);
+        int dot = domain.indexOf('.', 1);
+        return dot > 0 && dot < domain.length() - 1;
     }
     private static String text(String value, String label, int max) {
         if (value == null || value.isBlank()) throw new IllegalArgumentException(label + " is required");

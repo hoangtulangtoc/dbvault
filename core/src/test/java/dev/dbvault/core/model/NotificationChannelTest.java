@@ -24,6 +24,16 @@ class NotificationChannelTest {
                 .createdAt(NOW).updatedAt(NOW).build()).hasMessageContaining("webhook URL");
     }
 
+    @Test void acceptsOnlyAnEmailRecipientWithOneAtAndADottedDomain() {
+        for (String bad : new String[] {"ops", "@example.com", "ops@example", "ops@.com", "ops@example.",
+                "ops@ex@ample.com", "o ps@example.com", "ops@" + "a".repeat(200)}) {
+            assertThatThrownBy(() -> NotificationChannel.builder().id(UUID.randomUUID()).name("mail")
+                    .type(NotificationChannelType.EMAIL).emailTo(bad).createdAt(NOW).updatedAt(NOW).build())
+                    .as(bad).hasMessageContaining("not valid");
+        }
+        assertThat(channel(NotificationChannelType.EMAIL).getEmailTo()).isEqualTo("ops@example.com");
+    }
+
     @Test void validatesGenericAndSlackUrlsBeforeEncryption() {
         assertThat(NotificationChannel.validateWebhookUrl("http://localhost:8090/hook", false))
                 .isEqualTo("http://localhost:8090/hook");
