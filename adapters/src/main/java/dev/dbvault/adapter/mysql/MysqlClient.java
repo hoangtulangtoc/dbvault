@@ -9,6 +9,7 @@ import java.util.Map;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
+import dev.dbvault.adapter.process.ClientBinaries;
 import dev.dbvault.adapter.process.ProcessRunner;
 import dev.dbvault.core.model.DatabaseConnection;
 
@@ -42,7 +43,7 @@ public class MysqlClient {
 
         this.processRunner = processRunner;
         this.connectTimeout = connectTimeout;
-        this.binary = MysqlBinaries.require(binary, "dbvault.mysql.client-path");
+        this.binary = ClientBinaries.require(binary, "dbvault.mysql.client-path");
     }
 
     /**

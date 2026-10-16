@@ -8,6 +8,7 @@ import java.util.Map;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
+import dev.dbvault.adapter.process.ClientBinaries;
 import dev.dbvault.adapter.process.ProcessRunner;
 import dev.dbvault.core.model.DatabaseConnection;
 import dev.dbvault.core.model.DatabaseEngine;
@@ -26,7 +27,7 @@ class PostgresCliConnectionTestAdapter implements ConnectionTestPort {
             @Value("${dbvault.postgresql.psql-path}") Path binary,
             @Value("${dbvault.postgresql.connect-timeout}") Duration connectTimeout) {
         this.processRunner = processRunner;
-        this.binary = PostgresBinaries.require(binary, "dbvault.postgresql.psql-path");
+        this.binary = ClientBinaries.require(binary, "dbvault.postgresql.psql-path");
         this.connectTimeout = connectTimeout;
     }
 

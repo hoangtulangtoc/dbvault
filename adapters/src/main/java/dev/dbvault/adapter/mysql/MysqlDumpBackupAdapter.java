@@ -14,6 +14,7 @@ import java.util.zip.GZIPOutputStream;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
+import dev.dbvault.adapter.process.ClientBinaries;
 import dev.dbvault.adapter.process.ProcessRunner;
 import dev.dbvault.core.exception.BackupFailedException;
 import dev.dbvault.core.model.DatabaseConnection;
@@ -48,7 +49,7 @@ class MysqlDumpBackupAdapter implements LogicalBackupPort {
             @Value("${dbvault.backup.timeout}") Duration timeout) {
 
         this.processRunner = processRunner;
-        this.binary = MysqlBinaries.require(binary, "dbvault.mysql.dump-path");
+        this.binary = ClientBinaries.require(binary, "dbvault.mysql.dump-path");
         this.timeout = timeout;
     }
 
