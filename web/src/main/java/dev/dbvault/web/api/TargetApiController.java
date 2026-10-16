@@ -60,10 +60,11 @@ public class TargetApiController {
     }
 
     record TargetView(UUID id, String name, String engine, String host, int port, String database,
-            String username, Instant createdAt) {
+            String username, boolean tlsRequired, Instant createdAt) {
         static TargetView of(DatabaseTarget target) {
             return new TargetView(target.getId(), target.getName(), target.getEngine().name(), target.getHost(),
-                    target.getPort(), target.getDatabaseName(), target.getUsername(), target.getCreatedAt());
+                    target.getPort(), target.getDatabaseName(), target.getUsername(), target.isTlsRequired(),
+                    target.getCreatedAt());
         }
     }
 

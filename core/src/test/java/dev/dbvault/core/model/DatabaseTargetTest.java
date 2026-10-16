@@ -215,6 +215,25 @@ class DatabaseTargetTest {
     }
 
     @Test
+    void aTargetRequiresTlsUnlessItOptsOut() {
+        assertThat(valid().build().isTlsRequired()).isTrue();
+        assertThat(valid().tlsRequired(false).build().isTlsRequired()).isFalse();
+        assertThat(DatabaseConnection.to(valid().build(), "pw").tlsRequired()).isTrue();
+        assertThat(DatabaseConnection.to(valid().tlsRequired(false).build(), "pw").tlsRequired()).isFalse();
+    }
+
+    @Test
+    void optingOutOfTlsDropsTheLastConnectionCheckAndOtherEditsKeepTheChoice() {
+        DatabaseTarget tested = valid().lastConnectionCheck(ConnectionCheck.passed(Instant.now())).build();
+
+        DatabaseTarget optedOut = tested.edited("production", "127.0.0.1", 3306, "backup", null, null, null, false, false);
+
+        assertThat(optedOut.isTlsRequired()).isFalse();
+        assertThat(optedOut.hasBeenTested()).isFalse();
+        assertThat(optedOut.edited("renamed", "127.0.0.1", 3306, "backup", null).isTlsRequired()).isFalse();
+    }
+
+    @Test
     void anEditIsValidatedLikeARegistration() {
         DatabaseTarget original = valid().build();
 

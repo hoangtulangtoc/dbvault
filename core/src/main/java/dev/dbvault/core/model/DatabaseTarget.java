@@ -36,6 +36,13 @@ public final class DatabaseTarget {
     private final boolean verifyAfterBackup;
 
     /**
+     * Whether every connection to this target must be encrypted (DBV-33). True unless the operator
+     * opted out for a server that cannot speak TLS: a password and a whole dump would otherwise
+     * cross the network in clear text. See ADR-041 for what each engine's client then does.
+     */
+    private final boolean tlsRequired;
+
+    /**
      * The target's password, AES-256-GCM encrypted, Base64 encoded.
      *
      * <p>This field holds ciphertext at every point in the object's life, and
@@ -68,6 +75,7 @@ public final class DatabaseTarget {
             String authenticationDatabase,
             UUID storageProfileId,
             boolean verifyAfterBackup,
+            Boolean tlsRequired,
             String passwordCiphertext,
             Instant createdAt,
             ConnectionCheck lastConnectionCheck) {
@@ -87,6 +95,8 @@ public final class DatabaseTarget {
                     "verifyAfterBackup", "Automatic restore verification is not supported for "
                             + engine.displayName());
         }
+        // Unset means required: opting out has to be said, never inherited from a forgotten field.
+        this.tlsRequired = tlsRequired == null || tlsRequired;
         this.passwordCiphertext = require(passwordCiphertext, "passwordCiphertext", "Password is required");
         this.createdAt = require(createdAt, "createdAt", "Creation timestamp is required");
         this.lastConnectionCheck = lastConnectionCheck; // absent until the target is first tested
@@ -116,7 +126,8 @@ public final class DatabaseTarget {
             String authenticationDatabase,
             String newPasswordCiphertext,
             UUID storageProfileId,
-            boolean verifyAfterBackup) {
+            boolean verifyAfterBackup,
+            boolean tlsRequired) {
 
         // Built before comparing, so the comparison sees the values as the
         // constructor normalises them — " db " and "db" are the same host.
@@ -128,15 +139,31 @@ public final class DatabaseTarget {
                 .authenticationDatabase(authenticationDatabase)
                 .storageProfileId(storageProfileId)
                 .verifyAfterBackup(verifyAfterBackup)
+                .tlsRequired(tlsRequired)
                 .passwordCiphertext(newPasswordCiphertext != null ? newPasswordCiphertext : passwordCiphertext)
                 .build();
 
         boolean connectionChanged = newPasswordCiphertext != null
                 || !edited.host.equals(this.host)
                 || edited.port != this.port
+                || edited.tlsRequired != this.tlsRequired
                 || !edited.username.equals(this.username)
                 || !java.util.Objects.equals(edited.authenticationDatabase, this.authenticationDatabase);
         return connectionChanged ? edited.toBuilder().lastConnectionCheck(null).build() : edited;
+    }
+
+    /** An edit that leaves whether TLS is required as it is. */
+    public DatabaseTarget edited(
+            String name,
+            String host,
+            int port,
+            String username,
+            String authenticationDatabase,
+            String newPasswordCiphertext,
+            UUID storageProfileId,
+            boolean verifyAfterBackup) {
+        return edited(name, host, port, username, authenticationDatabase, newPasswordCiphertext,
+                storageProfileId, verifyAfterBackup, tlsRequired);
     }
 
     /** An edit that leaves automatic restore verification as it is. */

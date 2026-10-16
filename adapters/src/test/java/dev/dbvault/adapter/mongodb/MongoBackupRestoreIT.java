@@ -179,7 +179,9 @@ class MongoBackupRestoreIT {
                 database,
                 USERNAME,
                 PASSWORD,
-                "admin");
+                "admin",
+                // The test container does not speak TLS; MySQL's integration tests cover a required one.
+                false);
     }
 
     private static DatabaseTarget sourceTarget() {

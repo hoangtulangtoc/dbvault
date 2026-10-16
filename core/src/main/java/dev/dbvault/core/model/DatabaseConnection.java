@@ -13,7 +13,20 @@ public record DatabaseConnection(
         String database,
         String username,
         String password,
-        String authenticationDatabase) {
+        String authenticationDatabase,
+        boolean tlsRequired) {
+
+    /** A connection that must be encrypted, which is what a target asks for unless it opted out. */
+    public DatabaseConnection(
+            DatabaseEngine engine,
+            String host,
+            int port,
+            String database,
+            String username,
+            String password,
+            String authenticationDatabase) {
+        this(engine, host, port, database, username, password, authenticationDatabase, true);
+    }
 
     /** Convenience for engines whose credentials belong to the target database itself. */
     public DatabaseConnection(
@@ -34,12 +47,13 @@ public record DatabaseConnection(
                 target.getDatabaseName(),
                 target.getUsername(),
                 plainPassword,
-                target.getAuthenticationDatabase());
+                target.getAuthenticationDatabase(),
+                target.isTlsRequired());
     }
 
     @Override
     public String toString() {
-        return "DatabaseConnection[%s %s:%d/%s as %s]"
-                .formatted(engine, host, port, database, username);
+        return "DatabaseConnection[%s %s:%d/%s as %s%s]"
+                .formatted(engine, host, port, database, username, tlsRequired ? ", TLS required" : "");
     }
 }

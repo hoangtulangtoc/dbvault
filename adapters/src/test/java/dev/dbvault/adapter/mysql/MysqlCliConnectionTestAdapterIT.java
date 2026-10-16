@@ -59,6 +59,18 @@ class MysqlCliConnectionTestAdapterIT {
         assertThat(result.message()).isEmpty();
     }
 
+    /** MySQL 8 encrypts with a certificate it generated itself, which REQUIRED accepts (ADR-041). */
+    @Test
+    void aTargetThatRequiresTlsGetsAnEncryptedSession() {
+        MysqlClient client = new MysqlClient(new ProcessRunner(), MYSQL_BINARY, Duration.ofSeconds(10));
+
+        ProcessRunner.Result cipher = client.execute(connection("backup", "s3cr3t", "shop"),
+                "SHOW SESSION STATUS LIKE 'Ssl_cipher'");
+
+        assertThat(cipher.succeeded()).as(cipher.errorOutput()).isTrue();
+        assertThat(cipher.stdout()).startsWith("Ssl_cipher").matches("(?s)Ssl_cipher\\s+\\S+.*");
+    }
+
     @Test
     void reportsMysqlsOwnWordsForABadPassword() {
         ConnectionTestPort.Result result = adapter.test(connection("backup", "wrong", "shop"));

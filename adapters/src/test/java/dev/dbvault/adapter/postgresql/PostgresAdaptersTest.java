@@ -55,6 +55,7 @@ class PostgresAdaptersTest {
         assertThat(command.getValue()).contains("--command=SELECT 1", "--no-password");
         assertThat(command.getValue()).noneMatch(argument -> argument.contains(CONNECTION.password()));
         assertThat(environment.getValue()).containsEntry("PGPASSWORD", CONNECTION.password());
+        assertThat(environment.getValue()).containsEntry("PGSSLMODE", "require");
     }
 
     @Test
@@ -125,7 +126,17 @@ class PostgresAdaptersTest {
         assertThat(commands.getAllValues()).allSatisfy(command ->
                 assertThat(command).noneMatch(argument -> argument.contains(CONNECTION.password())));
         assertThat(environments.getAllValues()).allSatisfy(environment ->
-                assertThat(environment).containsEntry("PGPASSWORD", CONNECTION.password()));
+                assertThat(environment).containsEntry("PGPASSWORD", CONNECTION.password())
+                        .containsEntry("PGSSLMODE", "require"));
+    }
+
+    @Test
+    void aTargetThatOptedOutOfTlsPrefersItExplicitly() {
+        DatabaseConnection optedOut = new DatabaseConnection(
+                DatabaseEngine.POSTGRESQL, "db.internal", 5432, "shop", "backup", "top-secret", null, false);
+
+        assertThat(PostgresCliConnectionTestAdapter.environment(optedOut, java.time.Duration.ofSeconds(5)))
+                .containsEntry("PGSSLMODE", "prefer");
     }
 
     @Test

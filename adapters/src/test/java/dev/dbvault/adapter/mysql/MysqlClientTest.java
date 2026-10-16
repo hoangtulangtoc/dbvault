@@ -82,6 +82,17 @@ class MysqlClientTest {
     }
 
     @Test
+    void aTargetThatOptedOutOfTlsStillSaysSoRatherThanInheritingTheHostsDefault() {
+        when(processRunner.run(anyList(), any(), any())).thenReturn(new ProcessRunner.Result(0, "1", ""));
+
+        client.execute(new DatabaseConnection(DatabaseEngine.MYSQL, "db.internal", 3307, "shop", "backup", "s3cr3t",
+                null, false), "SELECT 1");
+
+        verify(processRunner).run(command.capture(), any(), any());
+        assertThat(command.getValue()).contains("--ssl-mode=PREFERRED").doesNotContain("--ssl-mode=REQUIRED");
+    }
+
+    @Test
     void buildsTheExpectedCommandLine() {
         when(processRunner.run(anyList(), any(), any())).thenReturn(new ProcessRunner.Result(0, "1", ""));
 
@@ -93,6 +104,7 @@ class MysqlClientTest {
                 "--host=db.internal",
                 "--port=3307",
                 "--user=backup",
+                "--ssl-mode=REQUIRED",
                 "--connect-timeout=10",
                 "--batch",
                 "--skip-column-names",

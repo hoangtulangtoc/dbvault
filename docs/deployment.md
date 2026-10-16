@@ -125,6 +125,16 @@ Docker host is `host.docker.internal` from inside the container; compose maps
 that name explicitly because on Linux it does not otherwise exist. A server
 elsewhere just needs to be routable from the container.
 
+**Connections to targets are encrypted.** Every target requires TLS unless its
+form's **Require TLS** box is cleared: the clients are told `--ssl-mode=REQUIRED`
+(MySQL), `PGSSLMODE=require` (PostgreSQL) or `--tls` (MongoDB), and refuse a
+server that will not encrypt. Upgrading to 1.0 switches existing targets to
+required too, so a server without TLS fails its next connection test until it
+is given TLS or its target is opted out; the list marks such a target **TLS not
+required**. Required means encrypted, not that the server's certificate is
+checked — except for MongoDB, whose tools check it against the image's CA store
+([ADR-041](adr/041-connections-to-targets-require-tls.md)).
+
 **Metadata PostgreSQL is not a target.** The `postgres` service in compose holds
 the application's target and execution records. It is not offered as a backup
 target automatically. Backing it up requires registering a PostgreSQL target
