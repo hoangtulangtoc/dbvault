@@ -5,6 +5,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 
@@ -13,8 +14,10 @@ import org.springframework.security.web.SecurityFilterChain;
  * Basic on every request instead of a session. It is checked before the console's chain, which
  * stays the catch-all, so an API caller gets a 401 rather than a redirect to a sign-in page.
  *
- * <p>No session is created, so there is no cookie for a browser to replay; CSRF protection stays on
- * and applies to anything here that is not a GET.
+ * <p>No session is created and no cookie is read: every request carries its own credentials. CSRF
+ * protection exists to stop a browser from replaying a cookie the user already holds, so on this
+ * chain it has nothing to protect and is off; a script's {@code POST} needs no token. The console's
+ * chain, which does use a session cookie, keeps CSRF on.
  */
 @Configuration
 public class ApiSecurityConfig {
@@ -26,6 +29,7 @@ public class ApiSecurityConfig {
                 .securityMatcher("/api/**")
                 .authorizeHttpRequests(requests -> requests.anyRequest().authenticated())
                 .httpBasic(Customizer.withDefaults())
+                .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS));
         return http.build();
     }
