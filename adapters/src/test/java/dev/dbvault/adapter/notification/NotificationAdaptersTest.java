@@ -39,6 +39,22 @@ class NotificationAdaptersTest {
                 "\"name\":\"automation\"", "\"sourceTarget\"");
     }
 
+    @Test void verificationWebhookUsesVerificationAsExecutionIdAndKeepsBackupIdentity() throws Exception {
+        HttpClient client = successfulClient("{}");
+        UUID backupId = UUID.randomUUID();
+        UUID verificationId = UUID.randomUUID();
+        NotificationMessage message = new NotificationMessage(NotificationEventType.VERIFICATION_SUCCESS,
+                Instant.parse("2026-09-24T01:00:00Z"), UUID.randomUUID(), "production", null,
+                null, null, null, backupId, null, verificationId, "SUCCEEDED", null, null, null);
+
+        new WebhookNotificationAdapter(new HttpNotificationSupport(client))
+                .send(new WebhookNotificationSettings("https://hooks.example.test/notify"), message);
+
+        assertThat(body(capturedRequest(client)))
+                .contains("\"executionId\":\"" + verificationId + "\"")
+                .contains("\"backupExecutionId\":\"" + backupId + "\"");
+    }
+
     @Test void nonSuccessfulHttpResponseIsAFailureWithoutLeakingTheUrl() throws Exception {
         HttpClient client = responseClient(503, "no");
         assertThatThrownBy(() -> new WebhookNotificationAdapter(new HttpNotificationSupport(client)).send(

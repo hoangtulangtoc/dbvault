@@ -21,17 +21,24 @@ public record EditTargetCommand(
         String username,
         String password,
         String authenticationDatabase,
-        UUID storageProfileId) {
+        UUID storageProfileId,
+        boolean verifyAfterBackup) {
 
     /** An edit that leaves the storage destination where it is. */
     public EditTargetCommand(String name, String host, int port, String username, String password,
             String authenticationDatabase) {
-        this(name, host, port, username, password, authenticationDatabase, null);
+        this(name, host, port, username, password, authenticationDatabase, null, false);
     }
 
     /** An edit of a SQL target that leaves the storage destination where it is. */
     public EditTargetCommand(String name, String host, int port, String username, String password) {
-        this(name, host, port, username, password, null, null);
+        this(name, host, port, username, password, null, null, false);
+    }
+
+    /** An edit with automatic restore verification off. */
+    public EditTargetCommand(String name, String host, int port, String username, String password,
+            String authenticationDatabase, UUID storageProfileId) {
+        this(name, host, port, username, password, authenticationDatabase, storageProfileId, false);
     }
 
     public boolean changesPassword() {

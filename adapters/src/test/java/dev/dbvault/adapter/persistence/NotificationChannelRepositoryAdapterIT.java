@@ -42,9 +42,6 @@ class NotificationChannelRepositoryAdapterIT {
         registry.add("spring.datasource.password", POSTGRES::getPassword);
         // This persistence slice never starts a database client. Keep its
         // context independent from which optional CLI packages exist on the host.
-        registry.add("dbvault.mariadb.client-path", () -> "/bin/true");
-        registry.add("dbvault.mariadb.dump-path", () -> "/bin/true");
-        registry.add("dbvault.sqlite.client-path", () -> "/bin/true");
     }
     @Autowired NotificationChannelRepository channels;
     @Autowired TargetNotificationSubscriptionRepository subscriptions;

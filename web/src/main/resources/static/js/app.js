@@ -212,10 +212,13 @@
         var port = document.getElementById('port');
         var authGroup = document.querySelector('[data-mongodb-auth-group]');
         var authDatabase = document.getElementById('authenticationDatabase');
+        var verificationGroup = document.querySelector('[data-verification-target-field]');
+        var verifyAfterBackup = document.getElementById('verifyAfterBackup');
         if (!engine) return;
 
         function renderEngineFields(changePort) {
             var option = engine.options[engine.selectedIndex];
+            var verificationSupported = !option || option.dataset.verificationSupported !== 'false';
             if (changePort && port && option && option.dataset.defaultPort) {
                 port.value = option.dataset.defaultPort;
             }
@@ -225,6 +228,11 @@
                 authDatabase.disabled = !mongo;
                 authDatabase.required = mongo;
                 if (changePort && mongo && !authDatabase.value) authDatabase.value = 'admin';
+            }
+            if (verificationGroup && verifyAfterBackup) {
+                verificationGroup.hidden = !verificationSupported;
+                verifyAfterBackup.disabled = !verificationSupported;
+                if (!verificationSupported) verifyAfterBackup.checked = false;
             }
         }
 

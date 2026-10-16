@@ -1,5 +1,6 @@
 package dev.dbvault.web.controller;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
@@ -196,6 +197,26 @@ class DatabaseTargetControllerTest {
                 .andExpect(redirectedUrl("/databases"));
 
         verify(service).register(any());
+    }
+
+    @Test
+    void registersAutomaticRestoreVerificationForASupportedEngine() throws Exception {
+        when(service.register(any())).thenReturn(target("production"));
+
+        mockMvc.perform(post("/databases").with(csrf())
+                        .param("engine", "MYSQL")
+                        .param("name", "production")
+                        .param("host", "127.0.0.1")
+                        .param("port", "3306")
+                        .param("database", "shop")
+                        .param("username", "backup")
+                        .param("password", "s3cr3t")
+                        .param("verifyAfterBackup", "true"))
+                .andExpect(status().is3xxRedirection());
+
+        ArgumentCaptor<RegisterTargetCommand> command = ArgumentCaptor.forClass(RegisterTargetCommand.class);
+        verify(service).register(command.capture());
+        assertThat(command.getValue().verifyAfterBackup()).isTrue();
     }
 
     @Test

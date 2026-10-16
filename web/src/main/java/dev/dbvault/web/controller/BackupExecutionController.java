@@ -24,6 +24,7 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import dev.dbvault.application.backup.BackupArtifactService;
 import dev.dbvault.application.target.ManageDatabaseTargetService;
 import dev.dbvault.application.storage.ManageStorageProfileService;
+import dev.dbvault.application.verification.RestoreVerificationService;
 import dev.dbvault.core.model.BackupExecution;
 import dev.dbvault.core.model.DatabaseTarget;
 import dev.dbvault.core.port.BackupExecutionRepository;
@@ -44,6 +45,7 @@ public class BackupExecutionController {
     private final ManageDatabaseTargetService targets;
     private final BackupArtifactService artifacts;
     private final ManageStorageProfileService storageProfiles;
+    private final RestoreVerificationService restoreVerification;
 
     @GetMapping
     String list(@RequestParam(name = "page", defaultValue = "1") int page, Model model) {
@@ -67,6 +69,15 @@ public class BackupExecutionController {
         model.addAttribute("targetName", target == null ? null : target.getName());
         model.addAttribute("targetEngine", target == null ? null : target.getEngine());
         model.addAttribute("artifactOnDisk", artifacts.isOnDisk(execution));
+        var verificationHistory = restoreVerification.history(id);
+        var latestVerification = verificationHistory.isEmpty() ? null : verificationHistory.getFirst();
+        model.addAttribute("verificationHistory", verificationHistory);
+        model.addAttribute("latestVerification", latestVerification);
+        model.addAttribute("restoreVerificationEnabled", restoreVerification.isEnabled());
+        model.addAttribute("restoreVerificationSupported",
+                target != null && restoreVerification.supports(target.getEngine()));
+        model.addAttribute("restoreVerificationAvailable",
+                target != null && restoreVerification.isAvailable(target.getEngine()));
         model.addAttribute("storageProfileName", execution.getStorageProfileId() == null
                 ? "Local filesystem"
                 : storageProfiles.get(execution.getStorageProfileId()).getName());
@@ -92,6 +103,19 @@ public class BackupExecutionController {
             case NOT_RECORDED -> flash.addFlashAttribute("message",
                     "This backup predates checksums, so there is nothing to compare with. Its SHA-256 now is "
                             + result.actual());
+        }
+        return "redirect:/executions/" + id;
+    }
+
+    @PostMapping("/{id}/test-restore")
+    String testRestore(@PathVariable UUID id, RedirectAttributes flash) {
+        try {
+            restoreVerification.start(id);
+            flash.addFlashAttribute("message", "Restore verification started");
+        } catch (NoSuchElementException e) {
+            flash.addFlashAttribute("error", "That backup no longer exists");
+        } catch (IllegalStateException e) {
+            flash.addFlashAttribute("error", e.getMessage());
         }
         return "redirect:/executions/" + id;
     }

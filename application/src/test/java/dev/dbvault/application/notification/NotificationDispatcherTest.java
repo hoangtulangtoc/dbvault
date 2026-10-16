@@ -25,6 +25,8 @@ import dev.dbvault.core.model.NotificationChannelSettings;
 import dev.dbvault.core.model.NotificationChannelType;
 import dev.dbvault.core.model.NotificationEventType;
 import dev.dbvault.core.model.NotificationMessage;
+import dev.dbvault.core.model.RestoreVerificationExecution;
+import dev.dbvault.core.model.RestoreVerificationResult;
 import dev.dbvault.core.model.TargetNotificationSubscription;
 import dev.dbvault.core.port.EncryptionPort;
 import dev.dbvault.core.port.NotificationChannelRepository;
@@ -76,6 +78,26 @@ class NotificationDispatcherTest {
                 NotificationEventType.BACKUP_FAILED);
         assertThat(port.last.errorMessage()).doesNotContain("hunter2", "secret", "abc.def")
                 .contains("[REDACTED]");
+    }
+
+    @Test void verificationEventIsFilteredAndCarriesBothAttemptAndBackupIds() {
+        RecordingPort port = new RecordingPort(false);
+        UUID channelId = UUID.randomUUID();
+        NotificationDispatcher dispatcher = dispatcher(List.of(port),
+                new InMemorySubscriptions(List.of(new TargetNotificationSubscription(
+                        channelId, Set.of(NotificationEventType.VERIFICATION_SUCCESS)))),
+                new InMemoryChannels(channel(channelId)));
+        UUID backupId = UUID.randomUUID();
+        UUID verificationId = UUID.randomUUID();
+        RestoreVerificationExecution execution = RestoreVerificationExecution
+                .started(verificationId, backupId, NOW)
+                .succeeded(new RestoreVerificationResult(2, "healthy"), NOW.plusSeconds(1));
+
+        dispatcher.publishVerification(target(), execution, NotificationEventType.VERIFICATION_SUCCESS);
+
+        assertThat(port.calls).isOne();
+        assertThat(port.last.backupExecutionId()).isEqualTo(backupId);
+        assertThat(port.last.verificationExecutionId()).isEqualTo(verificationId);
     }
 
     @Test void reportsAMissingAdapterClearly() {
