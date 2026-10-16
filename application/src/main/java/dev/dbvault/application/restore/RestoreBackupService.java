@@ -11,30 +11,35 @@ import java.util.concurrent.RejectedExecutionException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
 
+import dev.dbvault.application.EngineAdapterRegistry;
+import dev.dbvault.application.backup.BackupActivityGuard;
+import dev.dbvault.application.storage.ArtifactStorageService;
+import dev.dbvault.application.storage.ArtifactStorageService.PreparedRead;
 import dev.dbvault.core.exception.RestoreFailedException;
 import dev.dbvault.core.model.BackupExecution;
+import dev.dbvault.core.model.ArtifactReference;
+import dev.dbvault.core.model.DatabaseConnection;
 import dev.dbvault.core.model.DatabaseTarget;
 import dev.dbvault.core.model.ExecutionStatus;
-import dev.dbvault.core.model.MysqlConnection;
 import dev.dbvault.core.model.RestoreExecution;
 import dev.dbvault.core.port.BackupExecutionRepository;
 import dev.dbvault.core.port.DatabaseTargetRepository;
 import dev.dbvault.core.port.EncryptionPort;
-import dev.dbvault.core.port.MysqlLogicalRestorePort;
 import dev.dbvault.core.port.RestoreExecutionRepository;
+import dev.dbvault.core.port.StoragePort;
 
-import lombok.RequiredArgsConstructor;
 
 /**
- * Loads a backup artifact back into the target it came from.
+ * Loads a backup artifact into a target: the one it came from, or any other
+ * registered target (ADR-014).
  *
  * <p>Split into accept-then-run for the same reasons as a backup, described in
  * ADR-004: the row is committed before the work is submitted, so an accepted
  * restore has a URL to poll and a crash leaves evidence.
  */
 @Service
-@RequiredArgsConstructor
 public class RestoreBackupService {
 
     private static final Logger log = LoggerFactory.getLogger(RestoreBackupService.class);
@@ -42,21 +47,46 @@ public class RestoreBackupService {
     private final BackupExecutionRepository backups;
     private final RestoreExecutionRepository restores;
     private final DatabaseTargetRepository targets;
-    private final MysqlLogicalRestorePort restoreEngine;
+    private final EngineAdapterRegistry adapters;
+    private final ArtifactStorageService storage;
     private final EncryptionPort encryption;
     private final Executor jobExecutor;
     private final Clock clock;
+    private final BackupActivityGuard activityGuard;
+
+    @Autowired
+    public RestoreBackupService(BackupExecutionRepository backups, RestoreExecutionRepository restores,
+            DatabaseTargetRepository targets, EngineAdapterRegistry adapters, ArtifactStorageService storage,
+            EncryptionPort encryption, Executor jobExecutor, Clock clock, BackupActivityGuard activityGuard) {
+        this.backups = backups; this.restores = restores; this.targets = targets; this.adapters = adapters;
+        this.storage = storage; this.encryption = encryption; this.jobExecutor = jobExecutor;
+        this.clock = clock; this.activityGuard = activityGuard;
+    }
+
+    public RestoreBackupService(BackupExecutionRepository backups, RestoreExecutionRepository restores,
+            DatabaseTargetRepository targets, EngineAdapterRegistry adapters,
+            dev.dbvault.core.port.StoragePort storage, EncryptionPort encryption,
+            Executor jobExecutor, Clock clock, BackupActivityGuard activityGuard) {
+        this(backups, restores, targets, adapters, ArtifactStorageService.localOnly(storage), encryption,
+                jobExecutor, clock, activityGuard);
+    }
 
     /**
-     * Accepts a restore of {@code backupExecutionId} into its own target.
+     * Accepts a restore of {@code backupExecutionId} into {@code targetId}.
      *
      * <p>Not {@code @Transactional}, deliberately — see ADR-004.
      *
-     * @throws NoSuchElementException if the backup, or the target it belongs
-     *         to, no longer exists
+     * @param targetId where the data goes — the backup's own target, or any
+     *        other. The dump carries no {@code USE}, so a schema of another
+     *        name takes it as readily (ADR-005).
+     * @throws NoSuchElementException if the backup or the target no longer exists
      * @throws RestoreFailedException if the backup never produced an artifact
      */
-    public UUID start(UUID backupExecutionId) {
+    public UUID start(UUID backupExecutionId, UUID targetId) {
+        return activityGuard.withBackup(backupExecutionId, () -> startGuarded(backupExecutionId, targetId));
+    }
+
+    private UUID startGuarded(UUID backupExecutionId, UUID targetId) {
         BackupExecution backup = backups.findById(backupExecutionId)
                 .orElseThrow(() -> new NoSuchElementException(
                         "No backup execution with id " + backupExecutionId));
@@ -68,15 +98,21 @@ public class RestoreBackupService {
                     "That backup is %s, so there is nothing to restore".formatted(backup.getStatus()));
         }
 
-        DatabaseTarget target = targets.findById(backup.getTargetId())
-                .orElseThrow(() -> new NoSuchElementException(
-                        "The target this backup came from no longer exists"));
+        DatabaseTarget target = targets.findById(targetId)
+                .orElseThrow(() -> new NoSuchElementException("The target to restore into no longer exists"));
+        DatabaseTarget source = targets.findById(backup.getTargetId())
+                .orElseThrow(() -> new NoSuchElementException("The target this backup came from no longer exists"));
+        if (source.getEngine() != target.getEngine()) {
+            throw new RestoreFailedException(
+                    "A %s backup can only be restored into a %s target"
+                            .formatted(source.getEngine().displayName(), source.getEngine().displayName()));
+        }
 
         RestoreExecution execution = restores.save(
-                RestoreExecution.started(UUID.randomUUID(), backupExecutionId, clock.instant()));
+                RestoreExecution.started(UUID.randomUUID(), backupExecutionId, targetId, clock.instant()));
 
         try {
-            jobExecutor.execute(() -> run(execution.getId(), target, Path.of(backup.getArtifactPath())));
+            jobExecutor.execute(() -> run(execution.getId(), target, backup));
         } catch (RejectedExecutionException e) {
             finish(execution, "Too many jobs are already running or queued. Try again shortly.");
         }
@@ -84,15 +120,23 @@ public class RestoreBackupService {
     }
 
     /** Runs one accepted restore. Called on a background thread; never throws. */
-    void run(UUID restoreId, DatabaseTarget target, Path artifact) {
+    void run(UUID restoreId, DatabaseTarget target, BackupExecution backup) {
         RestoreExecution execution = restores.findById(restoreId).orElseThrow();
-        try {
-            MysqlConnection connection =
-                    MysqlConnection.to(target, encryption.decrypt(target.getPasswordCiphertext()));
+        String filename = Path.of(backup.getArtifactLocator()).getFileName().toString();
+        ArtifactReference reference = new ArtifactReference(backup.getStorageProfileId(), backup.getArtifactLocator());
+        if (!storage.exists(reference)) {
+            finish(execution, "The backup artifact is no longer available. Nothing was restored.");
+            return;
+        }
+        try (PreparedRead artifact = storage.materialize(reference, restoreId, filename)) {
+            requireIntact(backup, artifact.path(), artifact.staged());
 
-            restoreEngine.restore(connection, artifact);
+            DatabaseConnection connection =
+                    DatabaseConnection.to(target, encryption.decryptFor(target.getId(), target.getPasswordCiphertext()));
+
+            adapters.restoreFor(target.getEngine()).restore(connection, artifact.path());
             restores.save(execution.succeeded(clock.instant()));
-            log.info("Restore {} of {} into target {} succeeded", restoreId, artifact, target.getName());
+            log.info("Restore {} of {} into target {} succeeded", restoreId, reference.locator(), target.getName());
 
         } catch (RestoreFailedException e) {
             finish(execution, e.getMessage());
@@ -102,11 +146,41 @@ public class RestoreBackupService {
         }
     }
 
+    /**
+     * Checked on the job thread, just before the client is started, rather than
+     * when the restore is accepted: the file could change in between, and the
+     * check reads the whole of it. See ADR-013.
+     *
+     * <p>A backup made before checksums were recorded is restored unchecked, as
+     * it always was.
+     */
+    private void requireIntact(BackupExecution backup, Path artifact, boolean staged) {
+        if (!backup.hasChecksum()) {
+            return;
+        }
+        String actual = storage.sha256(artifact, staged);
+        if (!backup.getSha256().equals(actual)) {
+            throw new RestoreFailedException((
+                    "The backup artifact '%s' does not match the checksum recorded when it was made "
+                            + "(recorded %s, now %s). It has changed since it was written, so it was not "
+                            + "restored and the target was not touched.")
+                    .formatted(artifact, backup.getSha256(), actual));
+        }
+    }
+
     /** @see dev.dbvault.core.port.BackupExecutionRepository#findRunning() */
     public int failInterruptedRestores() {
         List<RestoreExecution> stranded = restores.findRunning();
-        stranded.forEach(execution -> finish(
-                execution, "Interrupted: the application stopped while this restore was running."));
+        stranded.forEach(execution -> {
+            String message = "Interrupted: the application stopped while this restore was running.";
+            try {
+                storage.cleanup(execution.getId());
+            } catch (RuntimeException e) {
+                message += " Staging cleanup failed: " + e.getMessage();
+                log.error("Could not clean staging for interrupted restore {}", execution.getId(), e);
+            }
+            finish(execution, message);
+        });
         if (!stranded.isEmpty()) {
             log.warn("Marked {} restore(s) left running by a previous process as failed", stranded.size());
         }

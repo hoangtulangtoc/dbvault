@@ -48,15 +48,16 @@ services:
       # no default: without it the application refuses to start. See ADR-011.
       OPERATOR_USERNAME: ${OPERATOR_USERNAME:-admin}
       OPERATOR_PASSWORD_HASH: ${OPERATOR_PASSWORD_HASH}
+      STORAGE_STAGING_DIR: /var/lib/dbvault/backups/.staging
     ports:
       - "8080:8080"
     volumes:
       # Named, not bind-mounted: the artifacts outlive the container, and
       # nothing about them belongs in the source tree.
       - backups:/var/lib/dbvault/backups
-    # A MySQL running on the host is reachable as host.docker.internal from
-    # inside this container. On Linux that name does not exist without this
-    # line; on Docker Desktop it is harmless.
+    # A target database running on the host is reachable as
+    # host.docker.internal from inside this container. On Linux that name does
+    # not exist without this line; on Docker Desktop it is harmless.
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped

@@ -1,15 +1,18 @@
 # Deployment
 
 One image, one compose file. See
-[ADR-009](adr/009-one-image-that-carries-the-mysql-client.md) for why they are
-shaped this way.
+[ADR-009](adr/009-one-image-that-carries-the-mysql-client.md) for the original
+packaging decision and [ADR-017](adr/017-route-logical-backups-by-database-engine.md)
+for the PostgreSQL client added to it.
 
 ## What the image contains
 
-A JRE, the application jar, and Ubuntu's `mysql-client` — Oracle's MySQL 8.4,
-not MariaDB. That distinction is load-bearing: MariaDB's `mysqldump` rejects
-`--set-gtid-purged`, which this tool always passes, so every backup would fail.
-Anyone changing the base image must check it again.
+A JRE, the application jar, Ubuntu's `mysql-client` and
+`postgresql-client`. The MySQL package is Oracle's MySQL, not MariaDB. That
+distinction is load-bearing: MariaDB's `mysqldump` rejects
+`--set-gtid-purged`, which this tool always passes, so every MySQL backup would
+fail. The PostgreSQL package supplies `psql`, `pg_dump` and `pg_restore`.
+Anyone changing the base image must check all five binaries again.
 
 It runs as an unprivileged user, `dbvault` (uid 10001), and its healthcheck
 asks `/actuator/health`, so it only reports healthy once the application is up
@@ -37,19 +40,58 @@ as the start of a variable. Anything that is not a bcrypt hash of cost 10 or
 more stops the application at startup. Unlike the encryption key, losing it
 costs nothing: generate a new hash and restart.
 
-**Where the backups go.** The compose file uses a named volume, which is enough
-to survive the container but not the machine. These artifacts are the reason the
-tool exists — getting them somewhere else is outside this tool's job, and
-whatever already backs up that host should be pointed at the volume.
+**Where the backups go.** Local filesystem is the built-in default; compose
+stores it in the `backups` named volume. The Storage page can add an
+S3-compatible profile and a target can select it for future backups. The bucket
+must already exist. Use HTTPS in production; HTTP custom endpoints are intended
+for development. Static secrets are AES-256-GCM encrypted, while default-chain
+mode can use environment, web-identity, container or instance-role credentials.
 
-**Nothing prunes them.** There is no retention policy
-([ADR-008](adr/008-deleting-a-backup-takes-its-history-with-it.md)). The volume
-grows until somebody deletes backups through the console.
+The S3 identity needs Put, Get, Head and Delete plus multipart upload and abort
+permissions for its bucket/prefix. Configure a bucket lifecycle rule to abort
+incomplete multipart uploads left by a process crash. Bucket creation,
+encryption policy and object-version cleanup remain operator responsibilities.
+`STORAGE_STAGING_DIR` needs room for one complete artifact per concurrent S3
+job; normal, failed and known interrupted operation directories are removed.
 
-**Reaching the databases to be backed up.** A MySQL on the Docker host is
-`host.docker.internal` from inside the container; compose maps that name
-explicitly because on Linux it does not otherwise exist. A MySQL elsewhere just
-needs to be routable from the container.
+**Retention starts disabled.** Configure it per target in the Retention page to
+keep the newest N successful backups. It runs only after a new successful
+backup; saving a policy or restarting does not immediately prune existing
+files. Backups with restore history, failed attempts and running jobs stay
+outside automatic cleanup. Without a policy the volume still grows until an
+operator deletes backups through the console. See
+[ADR-024](adr/024-retention-keeps-new-unrestored-backups-per-target.md).
+
+**Schedules use the application's clock and one explicit zone each.** Cron
+expressions use Quartz syntax, with seconds as the first field. The schedule
+row persists in metadata PostgreSQL and its in-memory Quartz trigger is rebuilt
+at startup. A fire missed while the application is down is skipped rather than
+replayed; after restart the next future fire is shown in the console. This
+deployment is intentionally single-instance for scheduling — running several
+application replicas would create the same trigger in each replica.
+
+**Reaching the databases to be backed up.** A MySQL or PostgreSQL server on the
+Docker host is `host.docker.internal` from inside the container; compose maps
+that name explicitly because on Linux it does not otherwise exist. A server
+elsewhere just needs to be routable from the container.
+
+**Metadata PostgreSQL is not a target.** The `postgres` service in compose holds
+the application's target and execution records. It is not offered as a backup
+target automatically. Backing it up requires registering a PostgreSQL target
+explicitly, with credentials that have the required access.
+
+**Client paths.** The image sets `MYSQL_CLIENT_PATH`, `MYSQLDUMP_PATH`,
+`PSQL_PATH`, `PG_DUMP_PATH` and `PG_RESTORE_PATH` to `/usr/bin/...`. A source or
+custom-image deployment may override them, but every configured file must be
+executable or startup fails.
+
+PostgreSQL's dump tools have major-version compatibility rules: a client that
+can read a source is not necessarily able to produce an archive loadable by an
+older destination. The first PostgreSQL slice does not install or select among
+several client majors. Use `pg_dump --version` and provide `PSQL_PATH`,
+`PG_DUMP_PATH` and `PG_RESTORE_PATH` from a client release compatible with both
+the source and destination; the integration test proves a matching client and
+server major end to end.
 
 ## What it does and does not protect
 

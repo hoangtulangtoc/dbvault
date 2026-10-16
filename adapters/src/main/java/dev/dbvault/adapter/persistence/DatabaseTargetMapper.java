@@ -16,10 +16,12 @@ final class DatabaseTargetMapper {
         DatabaseTargetEntity entity = new DatabaseTargetEntity();
         entity.setId(target.getId());
         entity.setName(target.getName());
+        entity.setEngine(target.getEngine());
         entity.setHost(target.getHost());
         entity.setPort(target.getPort());
         entity.setDatabaseName(target.getDatabaseName());
         entity.setUsername(target.getUsername());
+        entity.setStorageProfileId(target.getStorageProfileId());
         entity.setPasswordEnc(target.getPasswordCiphertext());
         entity.setCreatedAt(target.getCreatedAt());
 
@@ -54,10 +56,12 @@ final class DatabaseTargetMapper {
         return DatabaseTarget.builder()
                 .id(entity.getId())
                 .name(entity.getName())
+                .engine(entity.getEngine())
                 .host(entity.getHost())
                 .port(entity.getPort())
                 .databaseName(entity.getDatabaseName())
                 .username(entity.getUsername())
+                .storageProfileId(entity.getStorageProfileId())
                 .passwordCiphertext(entity.getPasswordEnc())
                 .createdAt(entity.getCreatedAt())
                 .lastConnectionCheck(toConnectionCheck(entity))

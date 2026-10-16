@@ -1,5 +1,6 @@
 package dev.dbvault.core.port;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -12,14 +13,29 @@ public interface RestoreExecutionRepository {
 
     Optional<RestoreExecution> findById(UUID id);
 
-    /** Most recent first. The order is part of the contract. */
-    List<RestoreExecution> findAllNewestFirst();
+    /**
+     * One page of the history, most recent first.
+     *
+     * @param page 1-based
+     * @see BackupExecutionRepository#findNewestFirst(int, int)
+     */
+    HistoryPage<RestoreExecution> findNewestFirst(int page, int pageSize);
 
     /** @see BackupExecutionRepository#findRunning() */
     List<RestoreExecution> findRunning();
 
     /** How many restores refer to this backup. Shown before it is deleted. */
     long countForBackup(UUID backupExecutionId);
+
+    /** How many restores refer to any of these backups. Shown before they are deleted together. */
+    long countForBackups(Collection<UUID> backupExecutionIds);
+
+    /**
+     * How many restores went into this target or were made from a backup of
+     * it — every record that removing the target takes with it, each counted
+     * once.
+     */
+    long countInvolvingTarget(UUID targetId);
 
     /**
      * Removes every restore record referring to this backup.
@@ -29,4 +45,12 @@ public interface RestoreExecutionRepository {
      * no longer exists says less than nothing.
      */
     void deleteForBackup(UUID backupExecutionId);
+
+    /**
+     * Removes every restore record whose data went into this target.
+     *
+     * <p>Called only as part of removing the target itself, which the operator
+     * has confirmed. See ADR-014.
+     */
+    void deleteForTarget(UUID targetId);
 }

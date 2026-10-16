@@ -5,6 +5,10 @@ import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.HexFormat;
+import java.util.UUID;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -16,6 +20,8 @@ import dev.dbvault.core.port.StoragePort;
  */
 @Component
 class LocalFilesystemStorageAdapter implements StoragePort {
+
+    private static final int DIGEST_BUFFER_BYTES = 64 * 1024;
 
     private final Path root;
 
@@ -36,8 +42,14 @@ class LocalFilesystemStorageAdapter implements StoragePort {
     }
 
     @Override
-    public Path locationFor(String filename) {
-        return root.resolve(requireBareFilename(filename));
+    public Path locationFor(UUID targetId, UUID executionId, String filename) {
+        Path directory = root.resolve(targetId.toString()).resolve(executionId.toString());
+        try {
+            Files.createDirectories(directory);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+        return directory.resolve(requireBareFilename(filename));
     }
 
     @Override
@@ -54,12 +66,51 @@ class LocalFilesystemStorageAdapter implements StoragePort {
         }
     }
 
+    /**
+     * Reads the whole file. For a large artifact that is seconds of disk, paid
+     * once when the backup finishes and once per verification — the price of
+     * a checksum that describes what is actually on disk rather than what was
+     * meant to be written.
+     */
     @Override
-    public void delete(Path artifact) {
-        try {
-            Files.deleteIfExists(within(artifact, "delete"));
+    public String sha256Of(Path artifact) {
+        MessageDigest digest = sha256();
+        try (InputStream in = Files.newInputStream(within(artifact, "read"))) {
+            byte[] buffer = new byte[DIGEST_BUFFER_BYTES];
+            for (int read; (read = in.read(buffer)) != -1; ) {
+                digest.update(buffer, 0, read);
+            }
         } catch (IOException e) {
             throw new UncheckedIOException(e);
+        }
+        return HexFormat.of().formatHex(digest.digest());
+    }
+
+    @Override
+    public void delete(Path artifact) {
+        Path file = within(artifact, "delete");
+        try {
+            Files.deleteIfExists(file);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+        pruneEmptyParents(file.getParent());
+    }
+
+    /**
+     * Removes the execution and target directories once they are empty.
+     * Artifacts written before ADR-033 sit directly in the root, which is
+     * never removed. A directory that still holds anything is left alone, and
+     * failing to prune is not a failed delete.
+     */
+    private void pruneEmptyParents(Path directory) {
+        for (Path current = directory; current != null && !current.equals(root) && current.startsWith(root);
+                current = current.getParent()) {
+            try {
+                Files.delete(current);
+            } catch (IOException e) {
+                return;
+            }
         }
     }
 
@@ -78,6 +129,15 @@ class LocalFilesystemStorageAdapter implements StoragePort {
                     "Refusing to %s '%s': it is outside the backup directory".formatted(action, artifact));
         }
         return normalised;
+    }
+
+    private static MessageDigest sha256() {
+        try {
+            return MessageDigest.getInstance("SHA-256");
+        } catch (NoSuchAlgorithmException e) {
+            // Every Java platform is required to provide SHA-256.
+            throw new IllegalStateException(e);
+        }
     }
 
     /**

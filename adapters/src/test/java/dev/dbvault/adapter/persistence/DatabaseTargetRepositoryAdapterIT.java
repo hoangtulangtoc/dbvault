@@ -24,6 +24,7 @@ import dev.dbvault.core.exception.DuplicateTargetNameException;
 import dev.dbvault.core.exception.TargetInUseException;
 import dev.dbvault.core.model.BackupExecution;
 import dev.dbvault.core.model.ConnectionCheck;
+import dev.dbvault.core.model.DatabaseEngine;
 import dev.dbvault.core.model.DatabaseTarget;
 import dev.dbvault.core.port.BackupExecutionRepository;
 import dev.dbvault.core.port.DatabaseTargetRepository;
@@ -59,6 +60,7 @@ class DatabaseTargetRepositoryAdapterIT {
         DatabaseTarget saved = repository.save(target("production", "shop"));
 
         DatabaseTarget found = repository.findById(saved.getId()).orElseThrow();
+        assertThat(found.getEngine()).isEqualTo(DatabaseEngine.MYSQL);
         assertThat(found.getName()).isEqualTo("production");
         assertThat(found.getHost()).isEqualTo("127.0.0.1");
         assertThat(found.getPort()).isEqualTo(3306);
@@ -66,6 +68,20 @@ class DatabaseTargetRepositoryAdapterIT {
         assertThat(found.getUsername()).isEqualTo("backup");
         assertThat(found.getPasswordCiphertext()).isEqualTo("Y2lwaGVydGV4dA==");
         assertThat(found.getCreatedAt()).isEqualTo(Instant.parse("2026-09-09T10:15:30Z"));
+    }
+
+    @Test
+    void savesAPostgresqlTargetWithItsLongerUsername() {
+        DatabaseTarget postgres = target("analytics", "warehouse").toBuilder()
+                .engine(DatabaseEngine.POSTGRESQL)
+                .port(5432)
+                .username("u".repeat(63))
+                .build();
+
+        DatabaseTarget found = repository.findById(repository.save(postgres).getId()).orElseThrow();
+
+        assertThat(found.getEngine()).isEqualTo(DatabaseEngine.POSTGRESQL);
+        assertThat(found.getUsername()).hasSize(63);
     }
 
     @Test
@@ -123,6 +139,51 @@ class DatabaseTargetRepositoryAdapterIT {
         assertThat(repository.findById(saved.getId())).isPresent();
         // Refused before the delete, so the foreign key is never hit.
         assertThat(output.getAll().substring(before)).doesNotContain("23503");
+    }
+
+    @Test
+    void savingAnEditedTargetUpdatesItInPlace() {
+        DatabaseTarget saved = repository.save(target("production", "shop"));
+
+        repository.save(saved.edited("production", "10.0.0.5", 3307, "reader", "bmV3"));
+
+        assertThat(repository.findAll()).hasSize(1);
+        DatabaseTarget found = repository.findById(saved.getId()).orElseThrow();
+        assertThat(found.address()).isEqualTo("10.0.0.5:3307/shop");
+        assertThat(found.getUsername()).isEqualTo("reader");
+        assertThat(found.getPasswordCiphertext()).isEqualTo("bmV3");
+        assertThat(found.getCreatedAt()).isEqualTo(saved.getCreatedAt());
+    }
+
+    /** The name check excludes the target itself, so recasing its own name is not a clash. */
+    @Test
+    void aTargetMayKeepOrRecaseItsOwnName() {
+        DatabaseTarget saved = repository.save(target("production", "shop"));
+
+        repository.save(saved.edited("Production", "127.0.0.1", 3306, "backup", null));
+
+        assertThat(repository.findById(saved.getId()).orElseThrow().getName()).isEqualTo("Production");
+    }
+
+    @Test
+    void renamingOntoAnotherTargetsNameIsRefused() {
+        repository.save(target("production", "shop"));
+        DatabaseTarget staging = repository.save(target("staging", "shop"));
+
+        assertThatThrownBy(() -> repository.save(staging.edited("PRODUCTION", "127.0.0.1", 3306, "backup", null)))
+                .isInstanceOf(DuplicateTargetNameException.class);
+        assertThat(repository.findById(staging.getId()).orElseThrow().getName()).isEqualTo("staging");
+    }
+
+    @Test
+    void anEditThatChangesTheConnectionClearsTheStoredCheck() {
+        DatabaseTarget saved = repository.save(target("production", "shop"));
+        repository.recordConnectionCheck(saved.getId(), ConnectionCheck.passed(Instant.parse("2026-09-09T11:00:00Z")));
+        DatabaseTarget tested = repository.findById(saved.getId()).orElseThrow();
+
+        repository.save(tested.edited("production", "10.0.0.5", 3306, "backup", null));
+
+        assertThat(repository.findById(saved.getId()).orElseThrow().hasBeenTested()).isFalse();
     }
 
     @Test
@@ -215,13 +276,13 @@ class DatabaseTargetRepositoryAdapterIT {
     @org.junit.jupiter.api.BeforeEach
     void clearTable() {
         // Backups first: a target that still has one cannot be deleted.
-        backups.findAllNewestFirst().forEach(backup -> backups.deleteById(backup.getId()));
+        backups.findNewestFirst(1, 1000).items().forEach(backup -> backups.deleteById(backup.getId()));
         List<DatabaseTarget> existing = repository.findAll();
         existing.forEach(target -> repository.deleteById(target.getId()));
     }
 
     private static DatabaseTarget target(String name, String database) {
-        return DatabaseTarget.builder()
+        return DatabaseTarget.builder().engine(dev.dbvault.core.model.DatabaseEngine.MYSQL)
                 .id(UUID.randomUUID())
                 .name(name)
                 .host("127.0.0.1")

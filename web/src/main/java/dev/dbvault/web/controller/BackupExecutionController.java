@@ -18,13 +18,16 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import dev.dbvault.application.backup.BackupArtifactService;
 import dev.dbvault.application.target.ManageDatabaseTargetService;
+import dev.dbvault.application.storage.ManageStorageProfileService;
 import dev.dbvault.core.model.BackupExecution;
 import dev.dbvault.core.model.DatabaseTarget;
 import dev.dbvault.core.port.BackupExecutionRepository;
+import dev.dbvault.core.port.HistoryPage;
 
 import lombok.RequiredArgsConstructor;
 
@@ -40,11 +43,14 @@ public class BackupExecutionController {
     private final BackupExecutionRepository executions;
     private final ManageDatabaseTargetService targets;
     private final BackupArtifactService artifacts;
+    private final ManageStorageProfileService storageProfiles;
 
     @GetMapping
-    String list(Model model) {
-        List<BackupExecution> all = executions.findAllNewestFirst();
-        model.addAttribute("executions", all);
+    String list(@RequestParam(name = "page", defaultValue = "1") int page, Model model) {
+        HistoryPage<BackupExecution> history =
+                executions.findNewestFirst(HistoryPaging.page(page), HistoryPaging.PAGE_SIZE);
+        model.addAttribute("history", history);
+        model.addAttribute("executions", history.items());
         model.addAttribute("targetNames", targetNames());
         return "execution/list";
     }
@@ -53,9 +59,41 @@ public class BackupExecutionController {
     String detail(@PathVariable UUID id, Model model) {
         BackupExecution execution = executions.findById(id)
                 .orElseThrow(() -> new NoSuchElementException("No backup execution with id " + id));
+        DatabaseTarget target = targets.listAll().stream()
+                .filter(candidate -> candidate.getId().equals(execution.getTargetId()))
+                .findFirst()
+                .orElse(null);
         model.addAttribute("execution", execution);
-        model.addAttribute("targetName", targetNames().get(execution.getTargetId()));
+        model.addAttribute("targetName", target == null ? null : target.getName());
+        model.addAttribute("targetEngine", target == null ? null : target.getEngine());
+        model.addAttribute("artifactOnDisk", artifacts.isOnDisk(execution));
+        model.addAttribute("storageProfileName", execution.getStorageProfileId() == null
+                ? "Local filesystem"
+                : storageProfiles.get(execution.getStorageProfileId()).getName());
         return "execution/detail";
+    }
+
+    /**
+     * Re-reads the artifact and compares it with the checksum recorded when it
+     * was written. Synchronous: it reads the file once, which is bounded by the
+     * disk in a way a dump is not.
+     */
+    @PostMapping("/{id}/verify")
+    String verify(@PathVariable UUID id, RedirectAttributes flash) {
+        BackupArtifactService.Verification result = artifacts.verify(id);
+        switch (result.integrity()) {
+            case INTACT -> flash.addFlashAttribute("message",
+                    "Verified: the artifact matches the checksum recorded when it was made");
+            case MISMATCH -> flash.addFlashAttribute("error",
+                    "The artifact does not match its checksum — recorded %s, now %s. It has changed since it "
+                            .formatted(result.recorded(), result.actual())
+                            + "was written, and a restore from it will be refused.");
+            case MISSING -> flash.addFlashAttribute("error", "The artifact is no longer available");
+            case NOT_RECORDED -> flash.addFlashAttribute("message",
+                    "This backup predates checksums, so there is nothing to compare with. Its SHA-256 now is "
+                            + result.actual());
+        }
+        return "redirect:/executions/" + id;
     }
 
     /**
@@ -76,6 +114,49 @@ public class BackupExecutionController {
                         .build().toString())
                 .contentType(MediaType.APPLICATION_OCTET_STREAM)
                 .body(new InputStreamResource(content));
+    }
+
+    /**
+     * The backups ticked on the list, and what deleting them takes with them.
+     * A GET, so the list's checkboxes need no script: the list page is a form
+     * that lands here.
+     */
+    @GetMapping("/delete")
+    String confirmDeleteMany(
+            @RequestParam(name = "id", required = false) List<UUID> ids,
+            Model model,
+            RedirectAttributes flash) {
+
+        if (ids == null || ids.isEmpty()) {
+            flash.addFlashAttribute("error", "Tick the backups to delete first");
+            return "redirect:/executions";
+        }
+        BackupArtifactService.BulkDeletionPreview preview = artifacts.previewDeletions(ids);
+        if (preview.executions().isEmpty()) {
+            flash.addFlashAttribute("error", "Those backups no longer exist");
+            return "redirect:/executions";
+        }
+        model.addAttribute("preview", preview);
+        model.addAttribute("targetNames", targetNames());
+        return "execution/delete-many";
+    }
+
+    @PostMapping("/delete")
+    String deleteMany(
+            @RequestParam(name = "id", required = false) List<UUID> ids,
+            RedirectAttributes flash) {
+
+        if (ids == null || ids.isEmpty()) {
+            flash.addFlashAttribute("error", "Tick the backups to delete first");
+            return "redirect:/executions";
+        }
+        try {
+            BackupArtifactService.BulkDeletion done = artifacts.deleteAll(ids);
+            flash.addFlashAttribute("message", summary(done));
+        } catch (IllegalStateException e) {
+            flash.addFlashAttribute("error", e.getMessage());
+        }
+        return "redirect:/executions";
     }
 
     @GetMapping("/{id}/delete")
@@ -100,6 +181,24 @@ public class BackupExecutionController {
             flash.addFlashAttribute("error", e.getMessage());
         }
         return "redirect:/executions";
+    }
+
+    /** Counted in the singular when there is one, like every other count in the console. */
+    private static String summary(BackupArtifactService.BulkDeletion done) {
+        String text = done.deleted() == 1
+                ? "1 backup deleted"
+                : "%d backups deleted".formatted(done.deleted());
+        if (done.artifactsRemoved() > 0) {
+            text += done.artifactsRemoved() == 1
+                    ? ", along with 1 artifact"
+                    : ", along with %d artifacts".formatted(done.artifactsRemoved());
+        }
+        if (done.alreadyGone() > 0) {
+            text += done.alreadyGone() == 1
+                    ? " — 1 was already gone"
+                    : " — %d were already gone".formatted(done.alreadyGone());
+        }
+        return text;
     }
 
     /**

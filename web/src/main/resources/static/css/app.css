@@ -152,6 +152,8 @@ code { color: var(--text); font-family: var(--mono); font-size: .88em; overflow-
 .page-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: 1.35rem; }
 .page-header p { color: var(--muted); margin: .4rem 0 0; }
 .actions, .form-actions { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
+/* A POST button among the header's links lines up and stretches like them. */
+.page-header > .actions > form { display: contents; }
 .section-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin: 1.8rem 0 .8rem; }
 .eyebrow { margin-bottom: .35rem; color: var(--primary); font-size: .72rem; font-weight: 750; letter-spacing: .1em; text-transform: uppercase; }
 
@@ -205,6 +207,7 @@ td.actions { display: table-cell; width: 1%; }
 .row-actions { display: flex; align-items: center; justify-content: flex-end; gap: .4rem; }
 .row-actions form { margin: 0; }
 .empty-state { margin: 0; padding: 2.8rem 1.2rem; text-align: center; color: var(--muted); }
+.pager { display: flex; align-items: center; justify-content: center; gap: .9rem; margin-top: 1.1rem; }
 /* Links inside a sentence get an underline: colour alone is not a cue. */
 .empty-state a, .alert a, .field-hint a { text-decoration: underline; }
 
@@ -216,12 +219,12 @@ td.actions { display: table-cell; width: 1%; }
 .badge-warning { background: var(--warning-bg); border-color: color-mix(in srgb, var(--warning) 55%, var(--border)); color: var(--warning); }
 .badge-neutral { color: var(--muted); }
 
-/* A connection check: badge, when it ran, and MySQL's own error text. */
+/* A connection check: badge, when it ran, and the engine client's own error text. */
 .check-cell { min-width: 15rem; }
 /* A timestamp is one token; broken over four lines it is unreadable. */
 .nowrap { white-space: nowrap; }
 .checked-at { margin-left: .45rem; color: var(--muted); font-size: .75rem; white-space: nowrap; }
-/* Shown in full rather than truncated: MySQL's words are what tell an operator
+/* Shown in full rather than truncated: the client's words tell an operator
    which thing to go and fix. Allowed to wrap, never to widen the table. */
 /* Several short facts about one thing, one per line, none stretched. */
 .cell-stack { display: grid; gap: .3rem; justify-items: start; }
@@ -251,10 +254,19 @@ label, legend { color: var(--text); font-size: .84rem; font-weight: 670; }
 input, select, textarea { width: 100%; min-height: 44px; padding: .58rem .7rem; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--surface-raised); color: var(--text); }
 input::placeholder { color: color-mix(in srgb, var(--muted) 75%, transparent); }
 input:focus, select:focus, textarea:focus { border-color: var(--primary); box-shadow: var(--focus); outline: 0; }
+.checkbox-row { display: flex; align-items: center; gap: .6rem; }
+.checkbox-row input { width: auto; min-height: auto; }
+.checkbox-row label { margin: 0; }
+/* The rule above is written for text fields; a checkbox stretched to 100% by
+   44px is a grey slab, not a box to tick. */
+input[type="checkbox"] { width: 1.15rem; height: 1.15rem; min-height: 0; padding: 0; accent-color: var(--primary); cursor: pointer; }
+td.select { width: 1%; }
 .field-hint { margin: 0; color: var(--muted); font-size: .79rem; }
 .field-error { margin: .15rem 0 0; color: var(--danger); font-size: .82rem; }
 .field-error span { display: block; }
 input[aria-invalid="true"] { border-color: var(--danger); }
+/* Shown for context, never sent: a target's database, once it is registered. */
+input[readonly] { background: var(--surface); color: var(--muted); border-style: dashed; }
 .form-actions { margin-top: 1.4rem; }
 .alert ul { margin: .35rem 0 0; padding-left: 1.2rem; }
 

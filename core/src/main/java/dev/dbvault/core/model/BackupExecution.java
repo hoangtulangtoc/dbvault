@@ -3,6 +3,7 @@ package dev.dbvault.core.model;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
 import lombok.Builder;
 import lombok.Getter;
@@ -21,6 +22,9 @@ public final class BackupExecution {
     /** Matches the column width in V3. A stderr dump can be far longer. */
     public static final int MAX_ERROR_LENGTH = 2000;
 
+    /** Lower-case hex, the form {@code sha256sum} prints — and the check in V5. */
+    private static final Pattern SHA256_HEX = Pattern.compile("[0-9a-f]{64}");
+
     private final UUID id;
     private final UUID targetId;
     private final ExecutionStatus status;
@@ -29,11 +33,21 @@ public final class BackupExecution {
     /** Null while {@link ExecutionStatus#RUNNING}, set on every terminal state. */
     private final Instant finishedAt;
 
-    /** Where the dump was written. Null unless the backup succeeded. */
-    private final String artifactPath;
+    /** Provider-specific path or object key. Null unless the backup succeeded. */
+    private final String artifactLocator;
+
+    /** Null means the built-in local filesystem destination. */
+    private final UUID storageProfileId;
 
     /** Null unless the backup succeeded. */
     private final Long sizeBytes;
+
+    /**
+     * SHA-256 of the artifact exactly as stored — still gzipped — in lower-case
+     * hex. Null unless the backup succeeded, and null for backups made before
+     * checksums were recorded. See ADR-013.
+     */
+    private final String sha256;
 
     /** Null unless the backup failed. */
     private final String errorMessage;
@@ -45,8 +59,10 @@ public final class BackupExecution {
             ExecutionStatus status,
             Instant startedAt,
             Instant finishedAt,
-            String artifactPath,
+            String artifactLocator,
+            UUID storageProfileId,
             Long sizeBytes,
+            String sha256,
             String errorMessage) {
 
         this.id = require(id, "Execution id is required");
@@ -54,8 +70,10 @@ public final class BackupExecution {
         this.status = require(status, "Status is required");
         this.startedAt = require(startedAt, "Start timestamp is required");
         this.finishedAt = finishedAt;
-        this.artifactPath = artifactPath;
+        this.artifactLocator = artifactLocator;
+        this.storageProfileId = storageProfileId;
         this.sizeBytes = sizeBytes;
+        this.sha256 = sha256;
         this.errorMessage = truncate(errorMessage);
 
         if (status.isFinished() == (finishedAt == null)) {
@@ -63,29 +81,52 @@ public final class BackupExecution {
                     "A finished execution needs a finish timestamp, and a running one must not have "
                             + "(status=%s, finishedAt=%s)".formatted(status, finishedAt));
         }
+        if (sha256 != null && (status != ExecutionStatus.SUCCEEDED || !SHA256_HEX.matcher(sha256).matches())) {
+            throw new IllegalArgumentException(
+                    "A checksum belongs only to a successful backup, as 64 lower-case hex digits "
+                            + "(status=%s, sha256=%s)".formatted(status, sha256));
+        }
     }
 
     /** A backup that has just been accepted and not yet run. */
     public static BackupExecution started(UUID id, UUID targetId, Instant startedAt) {
+        return started(id, targetId, null, startedAt);
+    }
+
+    public static BackupExecution started(UUID id, UUID targetId, UUID storageProfileId, Instant startedAt) {
         return BackupExecution.builder()
                 .id(id)
                 .targetId(targetId)
+                .storageProfileId(storageProfileId)
                 .status(ExecutionStatus.RUNNING)
                 .startedAt(startedAt)
                 .build();
     }
 
-    public BackupExecution succeeded(String artifactPath, long sizeBytes, Instant finishedAt) {
+    /**
+     * @param sha256 the artifact's checksum, as {@code StoragePort#sha256Of}
+     *        computed it once the file was closed. Required: every backup made
+     *        from now on has one.
+     */
+    public BackupExecution succeeded(String artifactLocator, long sizeBytes, String sha256, Instant finishedAt) {
         requireStillRunning();
+        require(sha256, "A successful backup needs its checksum");
         return BackupExecution.builder()
                 .id(id)
                 .targetId(targetId)
+                .storageProfileId(storageProfileId)
                 .status(ExecutionStatus.SUCCEEDED)
                 .startedAt(startedAt)
                 .finishedAt(finishedAt)
-                .artifactPath(artifactPath)
+                .artifactLocator(artifactLocator)
                 .sizeBytes(sizeBytes)
+                .sha256(sha256)
                 .build();
+    }
+
+    /** False for backups made before checksums were recorded. */
+    public boolean hasChecksum() {
+        return sha256 != null;
     }
 
     public BackupExecution failed(String errorMessage, Instant finishedAt) {
@@ -101,6 +142,20 @@ public final class BackupExecution {
                         ? "Backup failed, with no reason reported"
                         : errorMessage.strip())
                 .build();
+    }
+
+    /** Compatibility for callers from the local-only model. */
+    @Deprecated(forRemoval = false)
+    public String getArtifactPath() {
+        return artifactLocator;
+    }
+
+    /** Compatibility for older tests while persisted terminology is migrated. */
+    public static class BackupExecutionBuilder {
+        public BackupExecutionBuilder artifactPath(String value) {
+            this.artifactLocator = value;
+            return this;
+        }
     }
 
     /** How long it ran, or has been running so far. */

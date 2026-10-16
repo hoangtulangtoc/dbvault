@@ -5,7 +5,6 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.UUID;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -15,20 +14,23 @@ import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import dev.dbvault.application.backup.RunBackupService;
 import dev.dbvault.application.target.ManageDatabaseTargetService;
 import dev.dbvault.application.target.TestTargetConnectionService;
+import dev.dbvault.application.storage.ManageStorageProfileService;
 import dev.dbvault.core.exception.DuplicateTargetNameException;
 import dev.dbvault.core.exception.InvalidTargetException;
 import dev.dbvault.core.exception.TargetInUseException;
 import dev.dbvault.core.model.BackupExecution;
 import dev.dbvault.core.model.ConnectionCheck;
+import dev.dbvault.core.model.DatabaseEngine;
 import dev.dbvault.core.model.DatabaseTarget;
-import dev.dbvault.core.model.ExecutionStatus;
 import dev.dbvault.core.port.BackupExecutionRepository;
 import dev.dbvault.web.dto.DatabaseTargetForm;
+import dev.dbvault.web.dto.EditTargetForm;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -50,29 +52,44 @@ public class DatabaseTargetController {
      */
     private static final Map<String, String> FORM_FIELDS = Map.of(
             "name", "name",
+            "engine", "engine",
             "host", "host",
             "port", "port",
             "databaseName", "database",
             "username", "username",
-            "password", "password");
+            "password", "password",
+            "storageProfileId", "storageProfileId");
 
     private final ManageDatabaseTargetService service;
     private final TestTargetConnectionService connectionTest;
     private final RunBackupService backups;
     private final BackupExecutionRepository executions;
+    private final ManageStorageProfileService storageProfiles;
+
+    @ModelAttribute("engines")
+    DatabaseEngine[] engines() {
+        return DatabaseEngine.values();
+    }
+
+    @ModelAttribute("storageProfiles")
+    Object storageProfiles() {
+        return storageProfiles.listAll();
+    }
 
     /**
      * Beside each target, its newest backup attempt and its newest successful
      * one — "when was this last backed up?" is the question the page exists to
      * answer, and a failed attempt must not hide the good copy before it.
+     * Asked of the database per target, rather than by reading the whole
+     * history to find the first of each.
      */
     @GetMapping
     String list(Model model) {
-        List<BackupExecution> newestFirst = executions.findAllNewestFirst();
         model.addAttribute("targets", service.listAll());
-        model.addAttribute("latestBackups", firstPerTarget(newestFirst.stream()));
-        model.addAttribute("lastSuccessfulBackups", firstPerTarget(newestFirst.stream()
-                .filter(e -> e.getStatus() == ExecutionStatus.SUCCEEDED)));
+        model.addAttribute("latestBackups", byTarget(executions.findLatestPerTarget()));
+        model.addAttribute("lastSuccessfulBackups", byTarget(executions.findLatestSucceededPerTarget()));
+        model.addAttribute("storageProfileNames", storageProfiles.listAll().stream()
+                .collect(Collectors.toMap(p -> p.getId(), p -> p.getName())));
         return "database/list";
     }
 
@@ -105,6 +122,51 @@ public class DatabaseTargetController {
             rejectOnForm(binding, e);
             return FORM_VIEW;
         }
+    }
+
+    @GetMapping("/{id}/edit")
+    String editForm(@PathVariable UUID id, Model model, RedirectAttributes flash) {
+        DatabaseTarget target;
+        try {
+            target = service.get(id);
+        } catch (NoSuchElementException e) {
+            return targetGone(flash);
+        }
+        model.addAttribute("form", EditTargetForm.of(target));
+        return editView(model, target);
+    }
+
+    @PostMapping("/{id}")
+    String update(
+            @PathVariable UUID id,
+            @Valid @ModelAttribute("form") EditTargetForm form,
+            BindingResult binding,
+            Model model,
+            RedirectAttributes flash) {
+
+        // Read even when the form is invalid: the page shows the schema, which
+        // is not a field the operator sends.
+        DatabaseTarget current;
+        try {
+            current = service.get(id);
+        } catch (NoSuchElementException e) {
+            return targetGone(flash);
+        }
+        if (binding.hasErrors()) {
+            return editView(model, current);
+        }
+        try {
+            DatabaseTarget saved = service.edit(id, form.toCommand());
+            flash.addFlashAttribute("message", "Saved target '%s'".formatted(saved.getName()));
+            return "redirect:/databases";
+        } catch (DuplicateTargetNameException e) {
+            binding.rejectValue("name", "target.duplicate", e.getMessage());
+        } catch (InvalidTargetException e) {
+            rejectOnForm(binding, e);
+        } catch (NoSuchElementException e) {
+            return targetGone(flash);
+        }
+        return editView(model, current);
     }
 
     /**
@@ -142,21 +204,64 @@ public class DatabaseTargetController {
         }
     }
 
-    @PostMapping("/{id}/delete")
-    String delete(@PathVariable UUID id, RedirectAttributes flash) {
+    /** What removing the target takes with it, said before the click rather than discovered after it. */
+    @GetMapping("/{id}/delete")
+    String confirmDelete(@PathVariable UUID id, Model model, RedirectAttributes flash) {
         try {
-            service.delete(id);
-            flash.addFlashAttribute("message", "Target removed");
-        } catch (TargetInUseException e) {
-            flash.addFlashAttribute("error", e.getMessage());
+            model.addAttribute("preview", service.previewRemoval(id));
+        } catch (NoSuchElementException e) {
+            return targetGone(flash);
         }
-        return "redirect:/databases";
+        return "database/delete";
     }
 
-    /** Relies on the repository's newest-first order: the first seen is kept. */
-    private static Map<UUID, BackupExecution> firstPerTarget(Stream<BackupExecution> newestFirst) {
-        return newestFirst.collect(Collectors.toMap(
-                BackupExecution::getTargetId, e -> e, (newer, older) -> newer));
+    /**
+     * A target with backups goes only with its name typed: its backups go with
+     * it (ADR-015). Typing, not ticking, for the reason ADR-014 gives.
+     */
+    @PostMapping("/{id}/delete")
+    String delete(
+            @PathVariable UUID id,
+            @RequestParam(value = "confirmation", required = false) String confirmation,
+            RedirectAttributes flash) {
+
+        DatabaseTarget target;
+        try {
+            target = service.get(id);
+        } catch (NoSuchElementException e) {
+            flash.addFlashAttribute("message", "Target removed");
+            return "redirect:/databases";
+        }
+        boolean named = confirmation != null && target.getName().equals(confirmation.strip());
+        try {
+            service.delete(id, named);
+            flash.addFlashAttribute("message", "Target '%s' removed".formatted(target.getName()));
+            return "redirect:/databases";
+        } catch (TargetInUseException e) {
+            flash.addFlashAttribute("error", confirmation == null || confirmation.isBlank()
+                    ? e.getMessage()
+                    : "Type the target's name exactly — '%s' — to remove it with its backups"
+                            .formatted(target.getName()));
+        } catch (IllegalStateException e) {
+            flash.addFlashAttribute("error", e.getMessage());
+        }
+        return "redirect:/databases/" + id + "/delete";
+    }
+
+    /** The repository returns at most one per target; a duplicate would be a bug there, so it fails here. */
+    private static Map<UUID, BackupExecution> byTarget(List<BackupExecution> onePerTarget) {
+        return onePerTarget.stream().collect(Collectors.toMap(BackupExecution::getTargetId, e -> e));
+    }
+
+    /** The shared form page, in edit mode: {@code editing} is what switches it. */
+    private static String editView(Model model, DatabaseTarget target) {
+        model.addAttribute("editing", target);
+        return FORM_VIEW;
+    }
+
+    private static String targetGone(RedirectAttributes flash) {
+        flash.addFlashAttribute("error", "That target no longer exists");
+        return "redirect:/databases";
     }
 
     private static void rejectOnForm(BindingResult binding, InvalidTargetException e) {

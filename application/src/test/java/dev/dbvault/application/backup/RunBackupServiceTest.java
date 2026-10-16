@@ -31,15 +31,18 @@ import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import dev.dbvault.application.EngineAdapterRegistry;
+import dev.dbvault.application.retention.ApplyBackupRetentionService;
 import dev.dbvault.core.exception.BackupFailedException;
 import dev.dbvault.core.model.BackupExecution;
+import dev.dbvault.core.model.DatabaseEngine;
 import dev.dbvault.core.model.ExecutionStatus;
 import dev.dbvault.core.model.DatabaseTarget;
-import dev.dbvault.core.model.MysqlConnection;
+import dev.dbvault.core.model.DatabaseConnection;
 import dev.dbvault.core.port.BackupExecutionRepository;
 import dev.dbvault.core.port.DatabaseTargetRepository;
 import dev.dbvault.core.port.EncryptionPort;
-import dev.dbvault.core.port.MysqlLogicalBackupPort;
+import dev.dbvault.core.port.LogicalBackupPort;
 import dev.dbvault.core.port.StoragePort;
 
 @ExtendWith(MockitoExtension.class)
@@ -48,12 +51,15 @@ class RunBackupServiceTest {
     private static final Instant NOW = Instant.parse("2026-09-09T10:15:30Z");
     private static final UUID TARGET_ID = UUID.randomUUID();
     private static final Path ARTIFACT = Path.of("/backups/shop_20260909_101530.sql.gz");
+    private static final String SHA256 = "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08";
 
     @Mock private DatabaseTargetRepository targets;
     @Mock private BackupExecutionRepository executions;
-    @Mock private MysqlLogicalBackupPort backupEngine;
+    @Mock private EngineAdapterRegistry adapters;
+    @Mock private LogicalBackupPort backupEngine;
     @Mock private StoragePort storage;
     @Mock private EncryptionPort encryption;
+    @Mock private ApplyBackupRetentionService retention;
 
     @Captor private ArgumentCaptor<BackupExecution> saved;
 
@@ -65,12 +71,14 @@ class RunBackupServiceTest {
 
     @BeforeEach
     void setUp() {
+        org.mockito.Mockito.lenient().when(adapters.backupFor(DatabaseEngine.MYSQL)).thenReturn(backupEngine);
+        org.mockito.Mockito.lenient().when(backupEngine.artifactSuffix()).thenReturn(".sql.gz");
         service = newService(capturingExecutor);
     }
 
     private RunBackupService newService(Executor executor) {
-        return new RunBackupService(targets, executions, backupEngine, storage, encryption,
-                executor, Clock.fixed(NOW, ZoneOffset.UTC));
+        return new RunBackupService(targets, executions, adapters, storage, encryption,
+                executor, Clock.fixed(NOW, ZoneOffset.UTC), retention);
     }
 
     // --- accepting a backup -------------------------------------------------
@@ -105,6 +113,18 @@ class RunBackupServiceTest {
         assertThat(saved.getValue().getStatus()).isEqualTo(ExecutionStatus.RUNNING);
         assertThat(saved.getValue().getStartedAt()).isEqualTo(NOW);
         assertThat(saved.getValue().getTargetId()).isEqualTo(TARGET_ID);
+    }
+
+    @Test
+    void snapshotsTheTargetsCurrentStorageProfileWhenTheJobIsAccepted() {
+        UUID profileId = UUID.randomUUID();
+        when(targets.findById(TARGET_ID)).thenReturn(Optional.of(target("shop", profileId)));
+        givenSaveEchoes();
+
+        service.start(TARGET_ID);
+
+        verify(executions).save(saved.capture());
+        assertThat(saved.getValue().getStorageProfileId()).isEqualTo(profileId);
     }
 
     /** The password is not carried through the queue; it is unwrapped when used. */
@@ -157,9 +177,10 @@ class RunBackupServiceTest {
     void recordsSuccessWithTheArtifactPathAndSize() {
         givenTarget();
         givenSaveEchoes();
-        when(encryption.decrypt("sealed")).thenReturn("s3cr3t");
-        when(storage.locationFor("shop_20260909_101530.sql.gz")).thenReturn(ARTIFACT);
+        when(encryption.decryptFor(any(), eq("sealed"))).thenReturn("s3cr3t");
+        when(storage.locationFor(eq(TARGET_ID), any(), eq("shop_20260909_101530.sql.gz"))).thenReturn(ARTIFACT);
         when(backupEngine.dumpTo(any(), eq(ARTIFACT))).thenReturn(8192L);
+        when(storage.sha256Of(ARTIFACT)).thenReturn(SHA256);
 
         runQueuedWork(service.start(TARGET_ID));
 
@@ -167,20 +188,96 @@ class RunBackupServiceTest {
         assertThat(recorded.getStatus()).isEqualTo(ExecutionStatus.SUCCEEDED);
         assertThat(recorded.getArtifactPath()).isEqualTo(ARTIFACT.toString());
         assertThat(recorded.getSizeBytes()).isEqualTo(8192L);
+        assertThat(recorded.getSha256()).isEqualTo(SHA256);
         assertThat(recorded.getFinishedAt()).isEqualTo(NOW);
+        verify(retention).applyAfterSuccessfulBackup(TARGET_ID);
+    }
+
+    /**
+     * Every execution has its own directory, so an existing file means
+     * something is wrong. Truncating it would destroy another backup
+     * (ISSUE-01), and cleaning up after the refusal would too.
+     */
+    @Test
+    void refusesToOverwriteAnArtifactThatIsAlreadyThere() {
+        givenTarget();
+        givenSaveEchoes();
+        when(storage.locationFor(any(), any(), any())).thenReturn(ARTIFACT);
+        when(storage.exists(ARTIFACT)).thenReturn(true);
+
+        runQueuedWork(service.start(TARGET_ID));
+
+        BackupExecution recorded = lastSaved();
+        assertThat(recorded.getStatus()).isEqualTo(ExecutionStatus.FAILED);
+        assertThat(recorded.getErrorMessage()).contains("Refusing to overwrite an existing artifact");
+        verify(backupEngine, never()).dumpTo(any(), any());
+        verify(storage, never()).delete(any());
+    }
+
+    @Test
+    void retentionFailureDoesNotTurnAGoodBackupIntoAFailure() {
+        givenTarget();
+        givenSaveEchoes();
+        when(encryption.decryptFor(any(), any())).thenReturn("s3cr3t");
+        when(storage.locationFor(any(), any(), any())).thenReturn(ARTIFACT);
+        when(backupEngine.dumpTo(any(), any())).thenReturn(1L);
+        when(storage.sha256Of(ARTIFACT)).thenReturn(SHA256);
+        when(retention.applyAfterSuccessfulBackup(TARGET_ID))
+                .thenThrow(new IllegalStateException("retention metadata unavailable"));
+
+        runQueuedWork(service.start(TARGET_ID));
+
+        assertThat(lastSaved().getStatus()).isEqualTo(ExecutionStatus.SUCCEEDED);
+        verify(storage, never()).delete(ARTIFACT);
+    }
+
+    /** Checksummed after the dump, never before: the file is only complete once the engine returns. */
+    @Test
+    void checksumsTheArtifactOnlyOnceTheDumpHasFinished() {
+        givenTarget();
+        givenSaveEchoes();
+        when(encryption.decryptFor(any(), any())).thenReturn("s3cr3t");
+        when(storage.locationFor(any(), any(), any())).thenReturn(ARTIFACT);
+        when(backupEngine.dumpTo(any(), any())).thenReturn(1L);
+        when(storage.sha256Of(ARTIFACT)).thenReturn(SHA256);
+
+        runQueuedWork(service.start(TARGET_ID));
+
+        InOrder order = inOrder(backupEngine, storage);
+        order.verify(backupEngine).dumpTo(any(), eq(ARTIFACT));
+        order.verify(storage).sha256Of(ARTIFACT);
+    }
+
+    /** A file that cannot be read back is not a backup anyone should rely on. */
+    @Test
+    void anArtifactThatCannotBeReadBackFailsTheBackupAndGoes() {
+        givenTarget();
+        givenSaveEchoes();
+        when(encryption.decryptFor(any(), any())).thenReturn("s3cr3t");
+        when(storage.locationFor(any(), any(), any())).thenReturn(ARTIFACT);
+        when(backupEngine.dumpTo(any(), any())).thenReturn(1L);
+        when(storage.sha256Of(ARTIFACT)).thenThrow(new java.io.UncheckedIOException(
+                new java.io.IOException("Input/output error")));
+
+        runQueuedWork(service.start(TARGET_ID));
+
+        assertThat(lastSaved().getStatus()).isEqualTo(ExecutionStatus.FAILED);
+        assertThat(lastSaved().getErrorMessage()).contains("Input/output error");
+        verify(storage).delete(ARTIFACT);
     }
 
     @Test
     void handsTheEngineTheDecryptedPassword() {
         givenTarget();
         givenSaveEchoes();
-        when(encryption.decrypt("sealed")).thenReturn("s3cr3t");
-        when(storage.locationFor(any())).thenReturn(ARTIFACT);
+        when(encryption.decryptFor(any(), eq("sealed"))).thenReturn("s3cr3t");
+        when(storage.locationFor(any(), any(), any())).thenReturn(ARTIFACT);
         when(backupEngine.dumpTo(any(), any())).thenReturn(1L);
+        when(storage.sha256Of(ARTIFACT)).thenReturn(SHA256);
 
         runQueuedWork(service.start(TARGET_ID));
 
-        ArgumentCaptor<MysqlConnection> connection = ArgumentCaptor.forClass(MysqlConnection.class);
+        ArgumentCaptor<DatabaseConnection> connection = ArgumentCaptor.forClass(DatabaseConnection.class);
         verify(backupEngine).dumpTo(connection.capture(), eq(ARTIFACT));
         assertThat(connection.getValue().password()).isEqualTo("s3cr3t");
         assertThat(connection.getValue().database()).isEqualTo("shop");
@@ -190,8 +287,8 @@ class RunBackupServiceTest {
     void recordsTheEnginesOwnMessageOnFailure() {
         givenTarget();
         givenSaveEchoes();
-        when(encryption.decrypt(any())).thenReturn("s3cr3t");
-        when(storage.locationFor(any())).thenReturn(ARTIFACT);
+        when(encryption.decryptFor(any(), any())).thenReturn("s3cr3t");
+        when(storage.locationFor(any(), any(), any())).thenReturn(ARTIFACT);
         when(backupEngine.dumpTo(any(), any()))
                 .thenThrow(new BackupFailedException("mysqldump exited with 2: Access denied"));
 
@@ -200,6 +297,7 @@ class RunBackupServiceTest {
         BackupExecution recorded = lastSaved();
         assertThat(recorded.getStatus()).isEqualTo(ExecutionStatus.FAILED);
         assertThat(recorded.getErrorMessage()).isEqualTo("mysqldump exited with 2: Access denied");
+        verifyNoInteractions(retention);
         // The engine already removed its own partial file.
         verify(storage, never()).delete(any());
     }
@@ -212,8 +310,8 @@ class RunBackupServiceTest {
     void recordsAFailureAndClearsTheFileWhenSomethingUnexpectedBreaks() {
         givenTarget();
         givenSaveEchoes();
-        when(encryption.decrypt(any())).thenThrow(new IllegalStateException("key rotated"));
-        when(storage.locationFor(any())).thenReturn(ARTIFACT);
+        when(encryption.decryptFor(any(), any())).thenThrow(new IllegalStateException("key rotated"));
+        when(storage.locationFor(any(), any(), any())).thenReturn(ARTIFACT);
 
         runQueuedWork(service.start(TARGET_ID));
 
@@ -249,7 +347,7 @@ class RunBackupServiceTest {
 
     @Test
     void namesTheArtifactAfterTheSchemaAndTheUtcStartTime() {
-        assertThat(RunBackupService.artifactFileName(target("shop"), NOW))
+        assertThat(RunBackupService.artifactFileName(target("shop"), NOW, ".sql.gz"))
                 .isEqualTo("shop_20260909_101530.sql.gz");
     }
 
@@ -257,14 +355,14 @@ class RunBackupServiceTest {
     @Test
     void sanitisesASchemaNameThatWouldEscapeTheStorageDirectory() {
         // Dots survive, separators do not, so the result is still a bare name.
-        assertThat(RunBackupService.artifactFileName(target("../../etc"), NOW))
+        assertThat(RunBackupService.artifactFileName(target("../../etc"), NOW, ".sql.gz"))
                 .isEqualTo(".._.._etc_20260909_101530.sql.gz")
                 .doesNotContain("/");
     }
 
     @Test
     void sanitisesSpacesAndQuotesInASchemaName() {
-        assertThat(RunBackupService.artifactFileName(target("my db'; drop"), NOW))
+        assertThat(RunBackupService.artifactFileName(target("my db'; drop"), NOW, ".sql.gz"))
                 .isEqualTo("my_db___drop_20260909_101530.sql.gz");
     }
 
@@ -290,7 +388,11 @@ class RunBackupServiceTest {
     }
 
     private static DatabaseTarget target(String schema) {
-        return DatabaseTarget.builder()
+        return target(schema, null);
+    }
+
+    private static DatabaseTarget target(String schema, UUID storageProfileId) {
+        return DatabaseTarget.builder().engine(dev.dbvault.core.model.DatabaseEngine.MYSQL)
                 .id(TARGET_ID)
                 .name("production")
                 .host("db.internal")
@@ -298,6 +400,7 @@ class RunBackupServiceTest {
                 .databaseName(schema)
                 .username("backup")
                 .passwordCiphertext("sealed")
+                .storageProfileId(storageProfileId)
                 .createdAt(NOW)
                 .build();
     }

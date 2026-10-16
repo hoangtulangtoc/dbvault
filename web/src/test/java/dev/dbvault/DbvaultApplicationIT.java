@@ -37,8 +37,9 @@ import dev.dbvault.application.backup.RunBackupService;
 import dev.dbvault.application.target.ManageDatabaseTargetService;
 import dev.dbvault.application.target.RegisterTargetCommand;
 import dev.dbvault.core.model.DatabaseTarget;
-import dev.dbvault.core.port.MysqlConnectionTestPort;
-import dev.dbvault.core.port.MysqlLogicalBackupPort;
+import dev.dbvault.core.port.ConnectionTestPort;
+import dev.dbvault.core.port.LogicalBackupPort;
+import dev.dbvault.core.port.LogicalRestorePort;
 import dev.dbvault.core.port.StoragePort;
 
 /**
@@ -90,11 +91,12 @@ class DbvaultApplicationIT {
         assertThat(context).isNotNull();
     }
 
-    /** Each port is satisfied by exactly one adapter, and the executor exists. */
+    /** Each engine contributes one complete adapter set, and the executor exists. */
     @Test
     void everyPortIsWiredToAnAdapter() {
-        assertThat(context.getBeanNamesForType(MysqlLogicalBackupPort.class)).hasSize(1);
-        assertThat(context.getBeanNamesForType(MysqlConnectionTestPort.class)).hasSize(1);
+        assertThat(context.getBeanNamesForType(LogicalBackupPort.class)).hasSize(2);
+        assertThat(context.getBeanNamesForType(LogicalRestorePort.class)).hasSize(2);
+        assertThat(context.getBeanNamesForType(ConnectionTestPort.class)).hasSize(2);
         assertThat(context.getBeanNamesForType(StoragePort.class)).hasSize(1);
         assertThat(context.getBean(RunBackupService.class)).isNotNull();
         assertThat(context.getBean(Executor.class)).isNotNull();
@@ -171,7 +173,9 @@ class DbvaultApplicationIT {
     @Test
     void aSignedInPostWithoutItsCsrfTokenChangesNothing() throws Exception {
         DatabaseTarget target = targets.register(new RegisterTargetCommand(
-                "csrf-" + UUID.randomUUID(), "127.0.0.1", 3306, "shop", "backup", "secret"));
+                "csrf-" + UUID.randomUUID(),
+                dev.dbvault.core.model.DatabaseEngine.MYSQL,
+                "127.0.0.1", 3306, "shop", "backup", "secret"));
         signIn();
         get("/databases");
 

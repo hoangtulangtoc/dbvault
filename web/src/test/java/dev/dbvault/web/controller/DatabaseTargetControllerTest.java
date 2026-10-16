@@ -1,6 +1,7 @@
 package dev.dbvault.web.controller;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -19,6 +20,7 @@ import java.util.NoSuchElementException;
 import java.util.List;
 import java.util.UUID;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -26,14 +28,21 @@ import org.springframework.context.annotation.Import;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.mockito.ArgumentCaptor;
 
+import dev.dbvault.application.backup.BackupArtifactService.BulkDeletionPreview;
 import dev.dbvault.application.backup.RunBackupService;
+import dev.dbvault.application.target.EditTargetCommand;
 import dev.dbvault.application.target.ManageDatabaseTargetService;
+import dev.dbvault.application.target.ManageDatabaseTargetService.TargetRemovalPreview;
+import dev.dbvault.application.target.RegisterTargetCommand;
 import dev.dbvault.application.target.TestTargetConnectionService;
+import dev.dbvault.application.storage.ManageStorageProfileService;
 import dev.dbvault.core.exception.DuplicateTargetNameException;
 import dev.dbvault.core.exception.TargetInUseException;
 import dev.dbvault.core.model.BackupExecution;
 import dev.dbvault.core.model.ConnectionCheck;
+import dev.dbvault.core.model.DatabaseEngine;
 import dev.dbvault.core.model.DatabaseTarget;
 import dev.dbvault.core.port.BackupExecutionRepository;
 import dev.dbvault.web.security.SecurityConfig;
@@ -45,6 +54,7 @@ import dev.dbvault.web.security.SecurityConfig;
 class DatabaseTargetControllerTest {
 
     private static final Instant CHECKED_AT = Instant.parse("2026-09-09T11:00:00Z");
+    private static final String SHA256 = "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08";
     private static final Instant BACKED_UP_AT = Instant.parse("2026-09-09T08:00:00Z");
 
     @Autowired
@@ -61,6 +71,14 @@ class DatabaseTargetControllerTest {
 
     @MockitoBean
     private BackupExecutionRepository executions;
+
+    @MockitoBean
+    private ManageStorageProfileService storageProfiles;
+
+    @BeforeEach
+    void noStorageProfilesYet() {
+        when(storageProfiles.listAll()).thenReturn(List.of());
+    }
 
     @Test
     void listsTargets() throws Exception {
@@ -90,7 +108,6 @@ class DatabaseTargetControllerTest {
     @Test
     void saysNeverForATargetThatHasNoBackups() throws Exception {
         when(service.listAll()).thenReturn(List.of(target("production")));
-        when(executions.findAllNewestFirst()).thenReturn(List.of());
 
         mockMvc.perform(get("/databases"))
                 .andExpect(content().string(org.hamcrest.Matchers.containsString(">Never</span>")));
@@ -104,11 +121,12 @@ class DatabaseTargetControllerTest {
     void showsTheLastSuccessfulBackupEvenWhenANewerAttemptFailed() throws Exception {
         DatabaseTarget target = target("production");
         BackupExecution good = BackupExecution.started(UUID.randomUUID(), target.getId(), BACKED_UP_AT)
-                .succeeded("/backups/shop.sql.gz", 8192, BACKED_UP_AT.plusSeconds(5));
+                .succeeded("/backups/shop.sql.gz", 8192, SHA256, BACKED_UP_AT.plusSeconds(5));
         BackupExecution failed = BackupExecution.started(UUID.randomUUID(), target.getId(), BACKED_UP_AT.plusSeconds(3600))
                 .failed("Access denied", BACKED_UP_AT.plusSeconds(3601));
         when(service.listAll()).thenReturn(List.of(target));
-        when(executions.findAllNewestFirst()).thenReturn(List.of(failed, good));
+        when(executions.findLatestPerTarget()).thenReturn(List.of(failed));
+        when(executions.findLatestSucceededPerTarget()).thenReturn(List.of(good));
 
         mockMvc.perform(get("/databases"))
                 .andExpect(content().string(org.hamcrest.Matchers.containsString("2026-09-09 08:00 UTC")))
@@ -123,7 +141,7 @@ class DatabaseTargetControllerTest {
     void flagsABackupThatIsStillRunning() throws Exception {
         DatabaseTarget target = target("production");
         when(service.listAll()).thenReturn(List.of(target));
-        when(executions.findAllNewestFirst()).thenReturn(List.of(
+        when(executions.findLatestPerTarget()).thenReturn(List.of(
                 BackupExecution.started(UUID.randomUUID(), target.getId(), BACKED_UP_AT)));
 
         mockMvc.perform(get("/databases"))
@@ -151,10 +169,21 @@ class DatabaseTargetControllerTest {
     }
 
     @Test
+    void newFormOffersOnlyImplementedEnginesWithTheirDefaultPorts() throws Exception {
+        mockMvc.perform(get("/databases/new"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(org.hamcrest.Matchers.matchesPattern(
+                        "(?s).*value=\"MYSQL\".*?data-default-port=\"3306\".*")))
+                .andExpect(content().string(org.hamcrest.Matchers.matchesPattern(
+                        "(?s).*value=\"POSTGRESQL\".*?data-default-port=\"5432\".*")));
+    }
+
+    @Test
     void registersAValidTargetAndRedirects() throws Exception {
         when(service.register(any())).thenReturn(target("production"));
 
         mockMvc.perform(post("/databases").with(csrf())
+                        .param("engine", "MYSQL")
                         .param("name", "production")
                         .param("host", "127.0.0.1")
                         .param("port", "3306")
@@ -168,8 +197,30 @@ class DatabaseTargetControllerTest {
     }
 
     @Test
+    void registersAPostgresqlTargetWithTheSelectedEngine() throws Exception {
+        when(service.register(any())).thenReturn(target("analytics"));
+
+        mockMvc.perform(post("/databases").with(csrf())
+                        .param("engine", "POSTGRESQL")
+                        .param("name", "analytics")
+                        .param("host", "postgres.internal")
+                        .param("port", "5432")
+                        .param("database", "warehouse")
+                        .param("username", "backup")
+                        .param("password", "s3cr3t"))
+                .andExpect(status().is3xxRedirection());
+
+        ArgumentCaptor<RegisterTargetCommand> command = ArgumentCaptor.forClass(RegisterTargetCommand.class);
+        verify(service).register(command.capture());
+        org.assertj.core.api.Assertions.assertThat(command.getValue().engine())
+                .isEqualTo(DatabaseEngine.POSTGRESQL);
+        org.assertj.core.api.Assertions.assertThat(command.getValue().port()).isEqualTo(5432);
+    }
+
+    @Test
     void redisplaysTheFormWithTheTypedValuesWhenAFieldIsInvalid() throws Exception {
         mockMvc.perform(post("/databases").with(csrf())
+                        .param("engine", "MYSQL")
                         .param("name", "")
                         .param("host", "db.internal")
                         .param("port", "3306")
@@ -190,6 +241,7 @@ class DatabaseTargetControllerTest {
         when(service.register(any())).thenThrow(new DuplicateTargetNameException("production"));
 
         mockMvc.perform(post("/databases").with(csrf())
+                        .param("engine", "MYSQL")
                         .param("name", "production")
                         .param("host", "127.0.0.1")
                         .param("port", "3306")
@@ -205,6 +257,7 @@ class DatabaseTargetControllerTest {
     @Test
     void neverRendersTheSubmittedPasswordBackIntoThePage() throws Exception {
         mockMvc.perform(post("/databases").with(csrf())
+                        .param("engine", "MYSQL")
                         .param("name", "")
                         .param("host", "127.0.0.1")
                         .param("port", "3306")
@@ -214,6 +267,116 @@ class DatabaseTargetControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(content().string(org.hamcrest.Matchers.not(
                         org.hamcrest.Matchers.containsString("s3cr3t"))));
+    }
+
+    @Test
+    void theEditFormIsFilledInExceptForThePassword() throws Exception {
+        DatabaseTarget target = target("production");
+        when(service.get(target.getId())).thenReturn(target);
+
+        mockMvc.perform(get("/databases/{id}/edit", target.getId()))
+                .andExpect(status().isOk())
+                .andExpect(view().name("database/form"))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("value=\"production\"")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("value=\"127.0.0.1\"")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString(
+                        "action=\"/databases/" + target.getId() + "\"")))
+                // The schema is shown read-only and has no name, so it is never sent.
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("readonly value=\"shop\"")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("readonly value=\"MySQL\"")))
+                .andExpect(content().string(org.hamcrest.Matchers.not(
+                        org.hamcrest.Matchers.containsString("name=\"engine\""))))
+                .andExpect(content().string(org.hamcrest.Matchers.not(
+                        org.hamcrest.Matchers.containsString("name=\"database\""))))
+                .andExpect(content().string(org.hamcrest.Matchers.not(
+                        org.hamcrest.Matchers.containsString("Y2lwaGVydGV4dA=="))))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("Save changes")));
+    }
+
+    @Test
+    void editingATargetThatIsGoneGoesBackToTheList() throws Exception {
+        UUID id = UUID.randomUUID();
+        when(service.get(id)).thenThrow(new NoSuchElementException("gone"));
+
+        mockMvc.perform(get("/databases/{id}/edit", id))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/databases"))
+                .andExpect(flash().attribute("error", "That target no longer exists"));
+    }
+
+    @Test
+    void savesAnEditAndRedirectsWithAnEmptyPasswordMeaningUnchanged() throws Exception {
+        DatabaseTarget target = target("production");
+        when(service.get(target.getId())).thenReturn(target);
+        when(service.edit(eq(target.getId()), any())).thenReturn(target("staging"));
+
+        mockMvc.perform(post("/databases/{id}", target.getId()).with(csrf())
+                        .param("name", "staging")
+                        .param("host", "10.0.0.5")
+                        .param("port", "3307")
+                        .param("username", "reader")
+                        .param("password", ""))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/databases"))
+                .andExpect(flash().attribute("message", "Saved target 'staging'"));
+
+        verify(service).edit(target.getId(), new EditTargetCommand("staging", "10.0.0.5", 3307, "reader", ""));
+    }
+
+    @Test
+    void anInvalidEditRedisplaysTheFormStillInEditMode() throws Exception {
+        DatabaseTarget target = target("production");
+        when(service.get(target.getId())).thenReturn(target);
+
+        mockMvc.perform(post("/databases/{id}", target.getId()).with(csrf())
+                        .param("name", "production")
+                        .param("host", "")
+                        .param("port", "3306")
+                        .param("username", "backup"))
+                .andExpect(status().isOk())
+                .andExpect(view().name("database/form"))
+                .andExpect(model().attributeHasFieldErrors("form", "host"))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("readonly value=\"shop\"")));
+
+        verify(service, never()).edit(any(), any());
+    }
+
+    @Test
+    void renamingOntoATakenNameIsReportedOnTheNameField() throws Exception {
+        DatabaseTarget target = target("staging");
+        when(service.get(target.getId())).thenReturn(target);
+        when(service.edit(eq(target.getId()), any())).thenThrow(new DuplicateTargetNameException("production"));
+
+        mockMvc.perform(post("/databases/{id}", target.getId()).with(csrf())
+                        .param("name", "production")
+                        .param("host", "127.0.0.1")
+                        .param("port", "3306")
+                        .param("username", "backup"))
+                .andExpect(status().isOk())
+                .andExpect(model().attributeHasFieldErrors("form", "name"))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("already exists")));
+    }
+
+    @Test
+    void anEditWithTheWrongCsrfTokenIsRefused() throws Exception {
+        mockMvc.perform(post("/databases/{id}", UUID.randomUUID()).with(csrf().useInvalidToken())
+                        .param("name", "production")
+                        .param("host", "127.0.0.1")
+                        .param("port", "3306")
+                        .param("username", "backup"))
+                .andExpect(status().isForbidden());
+
+        verify(service, never()).edit(any(), any());
+    }
+
+    @Test
+    void everyTargetOffersAnEditLink() throws Exception {
+        DatabaseTarget target = target("production");
+        when(service.listAll()).thenReturn(List.of(target));
+
+        mockMvc.perform(get("/databases"))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString(
+                        "href=\"/databases/" + target.getId() + "/edit\"")));
     }
 
     @Test
@@ -303,28 +466,156 @@ class DatabaseTargetControllerTest {
                 .andExpect(flash().attribute("error", "That target no longer exists"));
     }
 
-    @Test
-    void refusingToRemoveATargetWithBackupsIsReportedNotThrown() throws Exception {
-        UUID targetId = UUID.randomUUID();
-        org.mockito.Mockito.doThrow(new TargetInUseException("production"))
-                .when(service).delete(targetId);
+    // --- remove -------------------------------------------------------------
 
-        mockMvc.perform(post("/databases/{id}/delete", targetId).with(csrf()))
-                .andExpect(status().is3xxRedirection())
+    /** A target with backups goes to a page, not a one-click dialog; one without keeps the dialog. */
+    @Test
+    void offersThePageForATargetWithBackupsAndTheDialogForOneWithout() throws Exception {
+        DatabaseTarget withBackups = target("production");
+        DatabaseTarget empty = target("drill");
+        when(service.listAll()).thenReturn(List.of(withBackups, empty));
+        when(executions.findLatestPerTarget()).thenReturn(List.of(
+                BackupExecution.started(UUID.randomUUID(), withBackups.getId(), BACKED_UP_AT)
+                        .failed("boom", BACKED_UP_AT.plusSeconds(1))));
+
+        mockMvc.perform(get("/databases"))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString(
+                        "href=\"/databases/" + withBackups.getId() + "/delete\"")))
+                .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString(
+                        "href=\"/databases/" + empty.getId() + "/delete\""))))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("Remove target “drill”?")));
+    }
+
+    @Test
+    void theRemovePageCountsWhatGoesAndAsksForTheName() throws Exception {
+        DatabaseTarget target = target("production");
+        BackupExecution backup = BackupExecution.started(UUID.randomUUID(), target.getId(), BACKED_UP_AT)
+                .succeeded("/backups/shop.sql.gz", 8192, SHA256, BACKED_UP_AT.plusSeconds(5));
+        when(service.previewRemoval(target.getId())).thenReturn(new TargetRemovalPreview(
+                target,
+                new BulkDeletionPreview(List.of(backup, backup), 2, 16384L, 1L, null),
+                3L,
+                0L,
+                null));
+
+        mockMvc.perform(get("/databases/{id}/delete", target.getId()))
+                .andExpect(status().isOk())
+                .andExpect(view().name("database/delete"))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("All 2 of its backups go with it")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("16384</span> bytes in all")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("3</span> restore records")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("name=\"confirmation\"")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("Remove it and its backups")));
+    }
+
+    @Test
+    void theRemovePageOfATargetWithoutBackupsAsksOnlyForAClick() throws Exception {
+        DatabaseTarget target = target("drill");
+        when(service.previewRemoval(target.getId())).thenReturn(new TargetRemovalPreview(
+                target, new BulkDeletionPreview(List.of(), 0, 0L, 0L, null), 0L, 0L, null));
+
+        mockMvc.perform(get("/databases/{id}/delete", target.getId()))
+                .andExpect(content().string(org.hamcrest.Matchers.not(
+                        org.hamcrest.Matchers.containsString("name=\"confirmation\""))))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("Remove this target")));
+    }
+
+    /** Said instead of the button, so nobody types a name only to be told no. */
+    @Test
+    void theRemovePageSaysWhyItCannotGoAndOffersNoButton() throws Exception {
+        DatabaseTarget target = target("production");
+        when(service.previewRemoval(target.getId())).thenReturn(new TargetRemovalPreview(
+                target, new BulkDeletionPreview(List.of(), 0, 0L, 0L, null), 0L, 0L,
+                "A restore into this target is running. Wait for it to finish before removing the target."));
+
+        mockMvc.perform(get("/databases/{id}/delete", target.getId()))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("A restore into this target is running")))
+                .andExpect(content().string(org.hamcrest.Matchers.not(
+                        org.hamcrest.Matchers.containsString("Remove this target"))));
+    }
+
+    @Test
+    void theRemovePageOfATargetDeletedInAnotherTabSaysSo() throws Exception {
+        UUID id = UUID.randomUUID();
+        when(service.previewRemoval(id)).thenThrow(new NoSuchElementException("gone"));
+
+        mockMvc.perform(get("/databases/{id}/delete", id))
                 .andExpect(redirectedUrl("/databases"))
+                .andExpect(flash().attribute("error", "That target no longer exists"));
+    }
+
+    @Test
+    void removingATargetWithBackupsUnnamedSendsItBackToThePage() throws Exception {
+        DatabaseTarget target = target("production");
+        when(service.get(target.getId())).thenReturn(target);
+        org.mockito.Mockito.doThrow(new TargetInUseException("production"))
+                .when(service).delete(target.getId(), false);
+
+        mockMvc.perform(post("/databases/{id}/delete", target.getId()).with(csrf()))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/databases/" + target.getId() + "/delete"))
                 .andExpect(flash().attribute("error",
                         org.hamcrest.Matchers.containsString("still has backups")));
     }
 
     @Test
-    void deletesATarget() throws Exception {
+    void aWrongNameIsNotAConfirmation() throws Exception {
+        DatabaseTarget target = target("production");
+        when(service.get(target.getId())).thenReturn(target);
+        org.mockito.Mockito.doThrow(new TargetInUseException("production"))
+                .when(service).delete(target.getId(), false);
+
+        mockMvc.perform(post("/databases/{id}/delete", target.getId()).with(csrf()).param("confirmation", "Production"))
+                .andExpect(redirectedUrl("/databases/" + target.getId() + "/delete"))
+                .andExpect(flash().attribute("error",
+                        "Type the target's name exactly — 'production' — to remove it with its backups"));
+    }
+
+    @Test
+    void removesATargetWithItsBackupsWhenTheNameIsTyped() throws Exception {
+        DatabaseTarget target = target("production");
+        when(service.get(target.getId())).thenReturn(target);
+
+        mockMvc.perform(post("/databases/{id}/delete", target.getId()).with(csrf()).param("confirmation", " production "))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(redirectedUrl("/databases"))
+                .andExpect(flash().attribute("message", "Target 'production' removed"));
+
+        verify(service).delete(target.getId(), true);
+    }
+
+    @Test
+    void aRefusalWhileSomethingIsRunningIsReportedNotThrown() throws Exception {
+        DatabaseTarget target = target("production");
+        when(service.get(target.getId())).thenReturn(target);
+        org.mockito.Mockito.doThrow(new IllegalStateException("One of these backups is still running."))
+                .when(service).delete(target.getId(), true);
+
+        mockMvc.perform(post("/databases/{id}/delete", target.getId()).with(csrf()).param("confirmation", "production"))
+                .andExpect(redirectedUrl("/databases/" + target.getId() + "/delete"))
+                .andExpect(flash().attribute("error", "One of these backups is still running."));
+    }
+
+    @Test
+    void removingATargetThatIsAlreadyGoneIsNotAnError() throws Exception {
         UUID id = UUID.randomUUID();
+        when(service.get(id)).thenThrow(new NoSuchElementException("gone"));
 
         mockMvc.perform(post("/databases/{id}/delete", id).with(csrf()))
-                .andExpect(status().is3xxRedirection())
-                .andExpect(redirectedUrl("/databases"));
+                .andExpect(redirectedUrl("/databases"))
+                .andExpect(flash().attribute("message", "Target removed"));
 
-        verify(service).delete(id);
+        verify(service, never()).delete(any(), org.mockito.ArgumentMatchers.anyBoolean());
+    }
+
+    @Test
+    void removingATargetNeedsACsrfToken() throws Exception {
+        UUID id = UUID.randomUUID();
+
+        mockMvc.perform(post("/databases/{id}/delete", id).with(csrf().useInvalidToken()))
+                .andExpect(status().isForbidden());
+
+        verify(service, never()).delete(any(), org.mockito.ArgumentMatchers.anyBoolean());
     }
 
     private static DatabaseTarget target(String name) {
@@ -336,7 +627,7 @@ class DatabaseTargetControllerTest {
     }
 
     private static DatabaseTarget target(String name, ConnectionCheck check) {
-        return DatabaseTarget.builder()
+        return DatabaseTarget.builder().engine(dev.dbvault.core.model.DatabaseEngine.MYSQL)
                 .id(UUID.randomUUID())
                 .name(name)
                 .host("127.0.0.1")

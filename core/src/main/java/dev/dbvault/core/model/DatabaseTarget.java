@@ -9,15 +9,12 @@ import lombok.Builder;
 import lombok.Getter;
 
 /**
- * A MySQL server and schema this tool is allowed to back up.
+ * A database and schema this tool is allowed to back up.
  *
  * <p>Immutable, and it refuses to exist in an invalid state: every constraint
  * is checked in the constructor, so a reference to a {@code DatabaseTarget}
  * is already proof that its values are sane. Callers do not validate first.
  *
- * <p>There is no {@code engine} field. MySQL is the only engine, so a column
- * or an enum naming it would carry no information today; the migration that
- * introduces a second engine is the one that should add it.
  */
 @Getter
 public final class DatabaseTarget {
@@ -25,18 +22,15 @@ public final class DatabaseTarget {
     private static final int MAX_NAME_LENGTH = 100;
     private static final int MAX_HOST_LENGTH = 255;
 
-    /** MySQL's own limit on a schema identifier. */
-    private static final int MAX_DATABASE_NAME_LENGTH = 64;
-
-    /** MySQL 8's limit on a user name. */
-    private static final int MAX_USERNAME_LENGTH = 32;
-
     private final UUID id;
     private final String name;
+    private final DatabaseEngine engine;
     private final String host;
     private final int port;
     private final String databaseName;
     private final String username;
+    /** Null selects the built-in local filesystem destination. */
+    private final UUID storageProfileId;
 
     /**
      * The target's password, AES-256-GCM encrypted, Base64 encoded.
@@ -59,27 +53,75 @@ public final class DatabaseTarget {
      */
     private final ConnectionCheck lastConnectionCheck;
 
-    @Builder
+    @Builder(toBuilder = true)
     private DatabaseTarget(
             UUID id,
             String name,
+            DatabaseEngine engine,
             String host,
             int port,
             String databaseName,
             String username,
+            UUID storageProfileId,
             String passwordCiphertext,
             Instant createdAt,
             ConnectionCheck lastConnectionCheck) {
 
         this.id = require(id, "id", "Target id is required");
         this.name = text(name, "name", "Name", MAX_NAME_LENGTH);
+        this.engine = require(engine, "engine", "Database engine is required");
         this.host = text(host, "host", "Host", MAX_HOST_LENGTH);
         this.port = port(port);
-        this.databaseName = text(databaseName, "databaseName", "Database name", MAX_DATABASE_NAME_LENGTH);
-        this.username = text(username, "username", "Username", MAX_USERNAME_LENGTH);
+        this.databaseName = text(databaseName, "databaseName", "Database name", databaseNameLimit(engine));
+        this.username = text(username, "username", "Username", usernameLimit(engine));
+        this.storageProfileId = storageProfileId;
         this.passwordCiphertext = require(passwordCiphertext, "passwordCiphertext", "Password is required");
         this.createdAt = require(createdAt, "createdAt", "Creation timestamp is required");
         this.lastConnectionCheck = lastConnectionCheck; // absent until the target is first tested
+    }
+
+    /**
+     * This target with new connection details — the same target, not a new one.
+     *
+     * <p>The id, the schema and the creation time stay. The schema above all:
+     * every backup of this target is a dump of that schema, and a target that
+     * could be pointed at another one would make its history describe a
+     * database it no longer names. A different schema is a different target.
+     *
+     * <p>The last connection check is dropped when anything it depended on
+     * changes, since it describes a connection that is no longer the one held.
+     * A rename alone keeps it.
+     *
+     * @param newPasswordCiphertext the new password, already encrypted, or
+     *        {@code null} to keep the current one
+     * @throws InvalidTargetException if a value is missing or out of range
+     */
+    public DatabaseTarget edited(
+            String name, String host, int port, String username, String newPasswordCiphertext,
+            UUID storageProfileId) {
+
+        // Built before comparing, so the comparison sees the values as the
+        // constructor normalises them — " db " and "db" are the same host.
+        DatabaseTarget edited = toBuilder()
+                .name(name)
+                .host(host)
+                .port(port)
+                .username(username)
+                .storageProfileId(storageProfileId)
+                .passwordCiphertext(newPasswordCiphertext != null ? newPasswordCiphertext : passwordCiphertext)
+                .build();
+
+        boolean connectionChanged = newPasswordCiphertext != null
+                || !edited.host.equals(this.host)
+                || edited.port != this.port
+                || !edited.username.equals(this.username);
+        return connectionChanged ? edited.toBuilder().lastConnectionCheck(null).build() : edited;
+    }
+
+    /** An edit that leaves the storage destination where it is. */
+    public DatabaseTarget edited(
+            String name, String host, int port, String username, String newPasswordCiphertext) {
+        return edited(name, host, port, username, newPasswordCiphertext, storageProfileId);
     }
 
     /** True once this target has been probed at least once, whatever the outcome. */
@@ -90,6 +132,14 @@ public final class DatabaseTarget {
     /** {@code host:port/schema} — how a target identifies itself in the console. */
     public String address() {
         return "%s:%d/%s".formatted(host, port, databaseName);
+    }
+
+    private static int databaseNameLimit(DatabaseEngine engine) {
+        return engine == DatabaseEngine.POSTGRESQL ? 63 : 64;
+    }
+
+    private static int usernameLimit(DatabaseEngine engine) {
+        return engine == DatabaseEngine.POSTGRESQL ? 63 : 32;
     }
 
     private static String text(String value, String field, String label, int maxLength) {

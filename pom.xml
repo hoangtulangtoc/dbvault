@@ -13,11 +13,11 @@
 
   <groupId>dev.dbvault</groupId>
   <artifactId>dbvault</artifactId>
-  <version>0.1.0</version>
+  <version>0.2.0</version>
   <packaging>pom</packaging>
 
   <name>dbvault</name>
-  <description>MySQL logical backup and restore, driven from a web console</description>
+  <description>Multi-database logical backup and restore, driven from a web console</description>
 
   <modules>
     <module>core</module>
@@ -29,7 +29,23 @@
   <properties>
     <java.version>21</java.version>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <!-- Mockito 5's inline mock maker must start as an agent on JDK 21.
+         Self-attachment is disabled by several supported JDK distributions. -->
+    <argLine>-javaagent:${settings.localRepository}/org/mockito/mockito-core/${mockito.version}/mockito-core-${mockito.version}.jar</argLine>
+    <aws.sdk.version>2.54.20</aws.sdk.version>
   </properties>
+
+  <dependencyManagement>
+    <dependencies>
+      <dependency>
+        <groupId>software.amazon.awssdk</groupId>
+        <artifactId>bom</artifactId>
+        <version>${aws.sdk.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
 
   <dependencies>
     <dependency>

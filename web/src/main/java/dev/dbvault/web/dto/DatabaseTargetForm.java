@@ -1,6 +1,9 @@
 package dev.dbvault.web.dto;
 
+import java.util.UUID;
+
 import dev.dbvault.application.target.RegisterTargetCommand;
+import dev.dbvault.core.model.DatabaseEngine;
 
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -20,11 +23,12 @@ import lombok.Data;
 @Data
 public class DatabaseTargetForm {
 
-    private static final int MYSQL_DEFAULT_PORT = 3306;
-
     @NotBlank(message = "Name is required")
     @Size(max = 100, message = "Name must be at most 100 characters")
     private String name;
+
+    @NotNull(message = "Database engine is required")
+    private DatabaseEngine engine;
 
     @NotBlank(message = "Host is required")
     @Size(max = 255, message = "Host must be at most 255 characters")
@@ -40,19 +44,21 @@ public class DatabaseTargetForm {
     private String database;
 
     @NotBlank(message = "Username is required")
-    @Size(max = 32, message = "Username must be at most 32 characters")
+    @Size(max = 63, message = "Username must be at most 63 characters")
     private String username;
 
     @NotBlank(message = "Password is required")
     private String password;
+    private UUID storageProfileId;
 
     public static DatabaseTargetForm blank() {
         DatabaseTargetForm form = new DatabaseTargetForm();
-        form.setPort(MYSQL_DEFAULT_PORT);
+        form.setEngine(DatabaseEngine.MYSQL);
+        form.setPort(DatabaseEngine.MYSQL.defaultPort());
         return form;
     }
 
     public RegisterTargetCommand toCommand() {
-        return new RegisterTargetCommand(name, host, port, database, username, password);
+        return new RegisterTargetCommand(name, engine, host, port, database, username, password, storageProfileId);
     }
 }

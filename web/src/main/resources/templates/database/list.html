@@ -8,7 +8,7 @@
     <div>
       <div class="eyebrow">Setup</div>
       <h1>Backup targets</h1>
-      <p>The MySQL schemas this tool can back up and restore into.</p>
+      <p>The databases this tool can back up and restore into.</p>
     </div>
     <div class="actions">
       <a class="button button-primary" th:href="@{/databases/new}">Add target</a>
@@ -24,7 +24,9 @@
       <thead>
         <tr>
           <th scope="col">Name</th>
+          <th scope="col">Engine</th>
           <th scope="col">Address</th>
+          <th scope="col">Destination</th>
           <th scope="col">Last check</th>
           <th scope="col">Last backup</th>
           <th scope="col"><span class="visually-hidden">Actions</span></th>
@@ -33,6 +35,12 @@
       <tbody>
         <tr th:each="target : ${targets}">
           <td data-label="Name"><strong th:text="${target.name}">prod</strong></td>
+          <td data-label="Engine"><span class="badge badge-neutral" th:text="${target.engine.displayName}">MySQL</span></td>
+          <td data-label="Destination">
+            <span th:if="${target.storageProfileId == null}">Local filesystem</span>
+            <a th:unless="${target.storageProfileId == null}" th:href="@{/storage/{id}/edit(id=${target.storageProfileId})}"
+               th:text="${storageProfileNames.get(target.storageProfileId)}">S3 profile</a>
+          </td>
           <!-- The user rides under the address rather than in a column of its
                own: with Last backup added the row no longer fitted, and who a
                target connects as is secondary to where it points. -->
@@ -94,8 +102,18 @@
               <form method="post" th:action="@{/databases/{id}/backup(id=${target.id})}">
                 <button class="button button-small button-primary" type="submit" data-busy-label="Starting…">Back up now</button>
               </form>
+              <a class="button button-small" th:href="@{/schedules/new(target=${target.id})}">Schedule</a>
+              <a class="button button-small" th:href="@{/retention/{id}/edit(id=${target.id})}">Retention</a>
+              <a class="button button-small" th:href="@{/databases/{id}/edit(id=${target.id})}">Edit</a>
+              <!-- A target with backups takes them with it, so it gets a page
+                   that counts them and asks for its name (ADR-015). One without
+                   keeps the quick dialog; if a backup appears in between, the
+                   server sends it to that page anyway. -->
+              <a class="button button-small button-danger" th:if="${latestBackups.containsKey(target.id)}"
+                 th:href="@{/databases/{id}/delete(id=${target.id})}">Remove…</a>
               <form method="post" th:action="@{/databases/{id}/delete(id=${target.id})}"
-                    th:attr="data-confirm=|Remove target “${target.name}”? Its stored credentials are deleted. A target that still has backups cannot be removed.|"
+                    th:unless="${latestBackups.containsKey(target.id)}"
+                    th:attr="data-confirm=|Remove target “${target.name}”? Its stored credentials, retention policy, and the record of any restores into it are deleted.|"
                     data-confirm-title="Remove target" data-confirm-accept="Remove">
                 <button class="button button-small button-danger" type="submit" data-busy-label="Removing…">Remove</button>
               </form>

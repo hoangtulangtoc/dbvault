@@ -1,6 +1,7 @@
 package dev.dbvault.web.api;
 
 import java.time.Instant;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
@@ -46,8 +47,8 @@ public class TargetApiController {
         if (targets.listAll().stream().noneMatch(target -> target.getId().equals(id))) {
             throw new NoSuchElementException("No target with id " + id);
         }
-        return executions.findAllNewestFirst().stream()
-                .filter(execution -> execution.getTargetId().equals(id))
+        return executions.findAllForTarget(id).stream()
+                .sorted(Comparator.comparing(BackupExecution::getStartedAt).reversed())
                 .map(BackupView::of)
                 .toList();
     }
@@ -57,19 +58,21 @@ public class TargetApiController {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", missing.getMessage()));
     }
 
-    record TargetView(UUID id, String name, String host, int port, String database, String username,
-            Instant createdAt) {
+    record TargetView(UUID id, String name, String engine, String host, int port, String database,
+            String username, Instant createdAt) {
         static TargetView of(DatabaseTarget target) {
-            return new TargetView(target.getId(), target.getName(), target.getHost(), target.getPort(),
-                    target.getDatabaseName(), target.getUsername(), target.getCreatedAt());
+            return new TargetView(target.getId(), target.getName(), target.getEngine().name(), target.getHost(),
+                    target.getPort(), target.getDatabaseName(), target.getUsername(), target.getCreatedAt());
         }
     }
 
+    /** {@code sha256} is the checksum recorded when the dump was written, so a download can be verified. */
     record BackupView(UUID id, String status, Instant startedAt, Instant finishedAt, Long sizeBytes,
-            String error) {
+            String sha256, String error) {
         static BackupView of(BackupExecution execution) {
             return new BackupView(execution.getId(), execution.getStatus().name(), execution.getStartedAt(),
-                    execution.getFinishedAt(), execution.getSizeBytes(), execution.getErrorMessage());
+                    execution.getFinishedAt(), execution.getSizeBytes(), execution.getSha256(),
+                    execution.getErrorMessage());
         }
     }
 }

@@ -24,12 +24,14 @@ import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import dev.dbvault.application.EngineAdapterRegistry;
 import dev.dbvault.core.model.ConnectionCheck;
+import dev.dbvault.core.model.DatabaseEngine;
 import dev.dbvault.core.model.DatabaseTarget;
-import dev.dbvault.core.model.MysqlConnection;
+import dev.dbvault.core.model.DatabaseConnection;
 import dev.dbvault.core.port.DatabaseTargetRepository;
 import dev.dbvault.core.port.EncryptionPort;
-import dev.dbvault.core.port.MysqlConnectionTestPort;
+import dev.dbvault.core.port.ConnectionTestPort;
 
 @ExtendWith(MockitoExtension.class)
 class TestTargetConnectionServiceTest {
@@ -41,13 +43,16 @@ class TestTargetConnectionServiceTest {
     private DatabaseTargetRepository repository;
 
     @Mock
-    private MysqlConnectionTestPort connectionTest;
+    private ConnectionTestPort connectionTest;
+
+    @Mock
+    private EngineAdapterRegistry adapters;
 
     @Mock
     private EncryptionPort encryption;
 
     @Captor
-    private ArgumentCaptor<MysqlConnection> connection;
+    private ArgumentCaptor<DatabaseConnection> connection;
 
     @Captor
     private ArgumentCaptor<ConnectionCheck> recorded;
@@ -56,8 +61,9 @@ class TestTargetConnectionServiceTest {
 
     @BeforeEach
     void setUp() {
+        org.mockito.Mockito.lenient().when(adapters.connectionTestFor(DatabaseEngine.MYSQL)).thenReturn(connectionTest);
         service = new TestTargetConnectionService(
-                repository, connectionTest, encryption, Clock.fixed(NOW, ZoneOffset.UTC));
+                repository, adapters, encryption, Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
     /**
@@ -67,8 +73,8 @@ class TestTargetConnectionServiceTest {
     @Test
     void decryptsThePasswordAndHandsTheAdapterPlainText() {
         givenTarget();
-        when(encryption.decrypt("sealed")).thenReturn("s3cr3t");
-        when(connectionTest.test(any())).thenReturn(MysqlConnectionTestPort.Result.ok());
+        when(encryption.decryptFor(any(), eq("sealed"))).thenReturn("s3cr3t");
+        when(connectionTest.test(any())).thenReturn(ConnectionTestPort.Result.ok());
 
         service.test(TARGET_ID);
 
@@ -83,8 +89,8 @@ class TestTargetConnectionServiceTest {
     @Test
     void recordsASuccessfulCheckStampedWithTheInjectedClock() {
         givenTarget();
-        when(encryption.decrypt(any())).thenReturn("s3cr3t");
-        when(connectionTest.test(any())).thenReturn(MysqlConnectionTestPort.Result.ok());
+        when(encryption.decryptFor(any(), any())).thenReturn("s3cr3t");
+        when(connectionTest.test(any())).thenReturn(ConnectionTestPort.Result.ok());
 
         ConnectionCheck returned = service.test(TARGET_ID);
 
@@ -97,9 +103,9 @@ class TestTargetConnectionServiceTest {
     @Test
     void recordsTheFailureMessageVerbatim() {
         givenTarget();
-        when(encryption.decrypt(any())).thenReturn("s3cr3t");
+        when(encryption.decryptFor(any(), any())).thenReturn("s3cr3t");
         when(connectionTest.test(any())).thenReturn(
-                MysqlConnectionTestPort.Result.failed("ERROR 1045 (28000): Access denied for user 'backup'@'%'"));
+                ConnectionTestPort.Result.failed("ERROR 1045 (28000): Access denied for user 'backup'@'%'"));
 
         service.test(TARGET_ID);
 
@@ -117,8 +123,8 @@ class TestTargetConnectionServiceTest {
     @Test
     void neverSavesTheWholeTarget() {
         givenTarget();
-        when(encryption.decrypt(any())).thenReturn("s3cr3t");
-        when(connectionTest.test(any())).thenReturn(MysqlConnectionTestPort.Result.ok());
+        when(encryption.decryptFor(any(), any())).thenReturn("s3cr3t");
+        when(connectionTest.test(any())).thenReturn(ConnectionTestPort.Result.ok());
 
         service.test(TARGET_ID);
 
@@ -137,7 +143,7 @@ class TestTargetConnectionServiceTest {
     }
 
     private void givenTarget() {
-        when(repository.findById(TARGET_ID)).thenReturn(Optional.of(DatabaseTarget.builder()
+        when(repository.findById(TARGET_ID)).thenReturn(Optional.of(DatabaseTarget.builder().engine(dev.dbvault.core.model.DatabaseEngine.MYSQL)
                 .id(TARGET_ID)
                 .name("production")
                 .host("db.internal")

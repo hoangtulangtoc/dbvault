@@ -9,8 +9,9 @@ import java.util.Map;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
+import dev.dbvault.adapter.process.ClientBinaries;
 import dev.dbvault.adapter.process.ProcessRunner;
-import dev.dbvault.core.model.MysqlConnection;
+import dev.dbvault.core.model.DatabaseConnection;
 
 /**
  * Assembles and runs {@code mysql} command lines.
@@ -42,7 +43,7 @@ public class MysqlClient {
 
         this.processRunner = processRunner;
         this.connectTimeout = connectTimeout;
-        this.binary = MysqlBinaries.require(binary, "dbvault.mysql.client-path");
+        this.binary = ClientBinaries.require(binary, "dbvault.mysql.client-path");
     }
 
     /**
@@ -51,7 +52,7 @@ public class MysqlClient {
      * <p>The password reaches the child through {@code MYSQL_PWD} and never
      * appears in {@code command}, so it is not visible in {@code ps}.
      */
-    public ProcessRunner.Result execute(MysqlConnection connection, String sql) {
+    public ProcessRunner.Result execute(DatabaseConnection connection, String sql) {
         List<String> command = new ArrayList<>(baseArguments(connection));
         command.add("--batch");
         command.add("--skip-column-names");
@@ -67,7 +68,7 @@ public class MysqlClient {
                 connectTimeout.plusSeconds(5));
     }
 
-    private List<String> baseArguments(MysqlConnection connection) {
+    private List<String> baseArguments(DatabaseConnection connection) {
         return List.of(
                 binary.toString(),
                 "--host=" + tcpHost(connection.host()),

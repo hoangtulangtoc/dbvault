@@ -14,8 +14,10 @@ final class BackupExecutionMapper {
         entity.setStatus(execution.getStatus());
         entity.setStartedAt(execution.getStartedAt());
         entity.setFinishedAt(execution.getFinishedAt());
-        entity.setArtifactPath(execution.getArtifactPath());
+        entity.setArtifactLocator(execution.getArtifactLocator());
+        entity.setStorageProfileId(execution.getStorageProfileId());
         entity.setSizeBytes(execution.getSizeBytes());
+        entity.setSha256(execution.getSha256());
         entity.setErrorMessage(execution.getErrorMessage());
         return entity;
     }
@@ -27,8 +29,10 @@ final class BackupExecutionMapper {
                 .status(entity.getStatus())
                 .startedAt(entity.getStartedAt())
                 .finishedAt(entity.getFinishedAt())
-                .artifactPath(entity.getArtifactPath())
+                .artifactLocator(entity.getArtifactLocator())
+                .storageProfileId(entity.getStorageProfileId())
                 .sizeBytes(entity.getSizeBytes())
+                .sha256(entity.getSha256())
                 .errorMessage(entity.getErrorMessage())
                 .build();
     }

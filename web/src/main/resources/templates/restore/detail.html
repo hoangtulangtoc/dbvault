@@ -43,6 +43,11 @@
                        'yyyy-MM-dd HH:mm:ss')} + ' UTC'">…</a>
       </dd>
 
+      <!-- Not always the target above: a restore can go into any target
+           (ADR-014), so where the backup was taken is said separately. -->
+      <dt>Taken from</dt>
+      <dd th:text="${backup == null ? '—' : (sourceName != null ? sourceName : '(removed)')}">production</dd>
+
       <dt>Started</dt>
       <dd class="mono"
           th:text="${#temporals.format(
@@ -61,7 +66,7 @@
   <div th:if="${restore.errorMessage != null}">
     <div class="section-heading"><h2>Why it failed</h2></div>
     <!-- Where it stopped matters more here than anywhere else in the tool: the
-         schema may be half old and half new. -->
+         database may be partly old and partly new. -->
     <pre class="error-output" th:text="${restore.errorMessage}"></pre>
   </div>
 

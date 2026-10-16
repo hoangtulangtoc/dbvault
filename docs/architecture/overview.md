@@ -21,7 +21,7 @@ core        no dependencies at all — plain Java and Lombok
 | `core` | Domain model, ports, domain exceptions | nothing |
 | `adapters` | Outbound adapters — persistence, encryption, Flyway migrations | `core` |
 | `application` | Use case orchestration | `core` |
-| `web` | HTTP controllers, forms, templates, sign-in and CSRF (`web.security`), `main()` | `application`, `adapters` |
+| `web` | HTTP controllers, Quartz runtime adapter, forms, templates, sign-in and CSRF (`web.security`), `main()` | `application`, `adapters` |
 
 Two consequences are worth stating plainly, because they are the reason for the
 split rather than side effects of it:
@@ -47,29 +47,33 @@ split rather than side effects of it:
   ([ADR-011](../adr/011-one-operator-account-from-the-environment.md)).
 - **Only `application` calls `EncryptionPort`.** Adapters never hold the key, so
   there is exactly one place in the system where a secret is unwrapped, and one
-  place to review. `DatabaseTarget.passwordCiphertext` holds ciphertext at every
-  moment of its life; a plaintext password belongs in a separate type named for
+  place to review. `DatabaseTarget.passwordCiphertext` and static S3 secrets hold ciphertext at every
+  moment of their life; a plaintext password belongs in a separate type named for
   what it carries.
 
-## PostgreSQL is the metadata store, not a backup engine
+## Metadata PostgreSQL and PostgreSQL targets are separate
 
-This tool stores its own metadata — registered targets, and later the execution
-history — in PostgreSQL. That is the only reason `org.postgresql` appears in the
-build and the only reason the Flyway migrations are written in PostgreSQL's
-dialect.
+This tool stores its own metadata — registered targets and execution history —
+in PostgreSQL. That is why the JDBC driver is on the runtime classpath and why
+Flyway migrations use PostgreSQL's dialect.
 
-**PostgreSQL is not a database this tool can back up.** There is no PostgreSQL
-engine adapter, no `POSTGRESQL` enum value, and no plan for one in the current
-roadmap. MySQL is the only engine, which is also why `database_targets` has no
-`engine` column: the migration that introduces a second engine is the one that
-should add it.
+Queries lean on that where it helps: the target list finds each target's newest
+backup with `DISTINCT ON`, one row per target however long the history, rather
+than reading every backup to find the first of each.
 
-## Talking to MySQL
+That datasource is not a backup target. A PostgreSQL target is a separate
+`DatabaseTarget`, explicitly registered with its own host, database and
+credentials. Target access goes through `psql`, `pg_dump` and `pg_restore`, not
+through the metadata connection pool. The separation prevents a deployment
+credential from silently gaining a second purpose.
 
-Everything that reaches a target does so by running the MySQL client binaries as
-child processes, never over JDBC — see
-[ADR-003](../adr/003-shelling-out-to-the-mysql-client.md). Every such call goes
-through `ProcessRunner`, which is where three subprocess hazards are handled
+## Talking to target databases
+
+Everything that reaches a target runs that engine's client binaries as child
+processes, never JDBC — see
+[ADR-003](../adr/003-shelling-out-to-the-mysql-client.md) and
+[ADR-017](../adr/017-route-logical-backups-by-database-engine.md). Every call
+goes through `ProcessRunner`, which is where the subprocess hazards are handled
 once:
 
 - **Both pipes are drained concurrently, before `waitFor`.** A pipe holds only a
@@ -78,21 +82,25 @@ once:
   this with half a megabyte on each stream, and runs on a separate thread so a
   reintroduced deadlock fails the build instead of hanging it.
 - **Every command has a timeout**, after which the child is forcibly killed.
-- **Input too large for memory is redirected from a file.** `runWithInput`
-  points the child's stdin at a file and lets the kernel do the feeding.
-  Writing to a child's stdin from a thread of ours would add a fourth stream to
-  keep in lockstep, and a writer blocked on a child that is itself blocked
-  writing output is the same deadlock in a harder-to-see shape.
+- **Input too large for memory is fed from a stream.** `runFeeding` copies a
+  caller-supplied source into the child's stdin on a thread of its own, beside
+  the two that drain stdout and stderr, so none of the three ever waits on
+  another. If the source cannot be read, the child is killed before its stdin
+  is closed — a client given a clean end of input would take half a dump for a
+  whole one. See [ADR-016](../adr/016-restore-streams-the-dump-into-the-client.md).
+- **Every pipe has a dedicated thread**, never one borrowed from the common
+  pool, which is one worker smaller than the machine and would run out on a
+  small host with two jobs running.
 - **Output too large for memory is streamed.** `runStreaming` copies stdout into
   a caller-supplied sink through a fixed buffer, so a dump costs the same heap
   whatever its size. The sink is flushed but never closed — a
   `GZIPOutputStream`'s trailer is written on close, and that belongs to whoever
   opened it. If the sink cannot be written to, the child is killed at once
   rather than left blocked on a pipe until the timeout.
-- **Credentials travel in `ProcessBuilder.environment()`** as `MYSQL_PWD`. Never
-  on the command line, where `ps` shows them to every user on the host, and
-  never through `System.setProperty`, which is JVM-global and would leak between
-  jobs running at the same time.
+- **Credentials travel in `ProcessBuilder.environment()`** as `MYSQL_PWD` or
+  `PGPASSWORD`. Never on the command line, where `ps` shows them to every user
+  on the host, and never through `System.setProperty`, which is JVM-global and
+  would leak between jobs running at the same time.
 
 `MysqlClient` adds the MySQL-specific knowledge: it rewrites the literal host
 `localhost` to `127.0.0.1`, because the client otherwise connects over a Unix
@@ -100,6 +108,19 @@ socket and silently ignores `--port`. `MysqlDumpBackupAdapter` reuses that rule
 but not the connect timeout — `mysqldump` does not accept `--connect-timeout`
 and exits 7 with *unknown variable* if given it, so the `ProcessRunner` timeout
 is its only backstop.
+
+The PostgreSQL adapters pass the host, port, user and database explicitly and
+set `PGCONNECT_TIMEOUT`. `PostgresDumpBackupAdapter` writes a custom-format
+archive directly to its destination; `PostgresRestoreAdapter` lists that
+archive before starting a destructive restore. Each configured binary is
+checked for executability when its adapter is constructed.
+
+The use cases do not know those commands. `DatabaseConnection` carries the
+short-lived plaintext credential and `EngineAdapterRegistry` selects a
+`ConnectionTestPort`, `LogicalBackupPort` or `LogicalRestorePort` by
+`DatabaseEngine`. Duplicate adapters fail startup; a missing one is an explicit
+configuration error. The restore use case rejects different source and
+destination engines before it persists a job.
 
 ## Running a backup
 
@@ -112,11 +133,21 @@ are separate on purpose — see
    controller redirects to `/executions/{id}`. This method is deliberately not
    `@Transactional`: the row has to be visible to the background thread, which
    reads it through a different connection.
-2. **Running.** The pooled thread decrypts the password, asks `StoragePort`
-   where the artifact goes, runs `mysqldump` with its stdout gzipped straight
-   to that file, and writes the outcome onto the same row. Artifacts are
-   `<schema>_<timestamp>.sql.gz` — see
-   [ADR-006](../adr/006-gzip-the-dump-as-it-is-written.md).
+2. **Running.** The pooled thread decrypts the password, selects the engine's
+   backup adapter, asks it for the artifact suffix, and asks
+   `ArtifactStorageService` for a local destination or private staging path.
+   It writes a provider-neutral artifact reference onto the same row. MySQL streams
+   gzipped SQL to `<database>_<timestamp>.sql.gz`; PostgreSQL writes a custom
+   archive to `<database>_<timestamp>.dump`.
+
+`ArtifactStorageService` is the only application router between local storage,
+staging and S3. A RUNNING execution snapshots the target's profile id. Local
+successes keep an absolute path; S3 successes keep
+`<prefix>/<target-id>/<execution-id>/<filename>`. Upload completes before the
+row becomes `SUCCEEDED`. Restore downloads to private staging and verifies
+SHA-256 before the engine starts; download and verification otherwise stream
+directly from S3. See
+[ADR-025](../adr/025-s3-storage-profiles-and-local-staging.md).
 
 Meanwhile the detail page follows the row: it re-fetches itself every two
 seconds and swaps in the part that changed, until the row reaches a finished
@@ -126,22 +157,68 @@ The pool is bounded on both axes. A full queue is refused and recorded as a
 failed execution rather than growing without limit, because every running
 backup is a child process competing for the same disk.
 
+## Scheduling a backup
+
+`backup_schedules` stores the durable recurring intent: one target, a Quartz
+cron expression, an IANA time zone and an enabled flag. Quartz's runtime jobs
+are derived state rather than a second database model. It stays paused during
+startup while `BackupSchedulerStartup` asks the application service to
+reconcile every row into an in-memory trigger, then begins firing.
+
+The Quartz job contains only the schedule UUID. It loads the current definition
+and calls `RunBackupService.start`, so it shares the exact manual-backup path
+and its bounded queue. A missed fire during downtime is skipped; the next
+future fire remains. See
+[ADR-023](../adr/023-quartz-triggers-are-derived-from-backup-schedules.md).
+
+## Applying retention
+
+`backup_retention_policies` optionally gives one target a count of successful
+backups to keep. Once a new backup is durably `SUCCEEDED`, the same worker asks
+for older successful backups that have no restore history. Protected backups
+are excluded before the newest N are skipped, so a restore drill never consumes
+one of the rotating recent-copy slots.
+
+Retention takes the same file-before-row failure direction as manual deletion,
+but it never removes restore rows. A striped in-process guard serializes the
+small deletion critical section with restore acceptance: whichever begins
+first determines whether the backup is protected or already gone. Cleanup
+failure is stored on the policy and never rewrites the successful backup that
+triggered it. See
+[ADR-024](../adr/024-retention-keeps-new-unrestored-backups-per-target.md).
+
 A restore follows the same two-step shape and shares the same pool, so the bound
 is on total heavy work rather than on each kind separately. What a restore
 actually does — and what it deliberately does not — is in
-[ADR-007](../adr/007-restore-applies-a-dump-and-asks-first.md).
+[ADR-007](../adr/007-restore-applies-a-dump-and-asks-first.md). It can go into
+any registered target of the same engine
+([ADR-017](../adr/017-route-logical-backups-by-database-engine.md)), and before
+the client starts, the job thread checks the artifact against the checksum
+recorded when it was written
+([ADR-013](../adr/013-a-checksum-for-every-artifact.md)).
 
 Any row still RUNNING when the application starts belongs to a process that is
 gone — jobs run here and nowhere else — so startup marks them failed.
 
 ## Removing things
 
-Nothing is removed automatically. The chain is strict and walked by hand:
-a target cannot go while it has backups, and a backup cannot go while restore
+Operator-confirmed removal follows a strict chain walked by the use cases: a
+target cannot go while it has backups, and a backup cannot go while restore
 records refer to it. Deleting a backup removes those records, then its file,
 then its row — in that order, so a failure never strands a file on disk with
 nothing pointing at it. See
-[ADR-008](../adr/008-deleting-a-backup-takes-its-history-with-it.md).
+[ADR-008](../adr/008-deleting-a-backup-takes-its-history-with-it.md). Removing
+a target likewise removes the records of restores into it
+([ADR-014](../adr/014-restore-into-any-registered-target.md)).
+
+Several backups go together by the same steps, one after another, and a target
+can take its backups with it once its name is typed. Every check — a backup
+still running, a restore still reading one — is made for all of them before any
+is touched
+([ADR-015](../adr/015-deleting-many-backups-and-a-target-with-them.md)). Every
+foreign key that protects backup or restore history is `RESTRICT`: the schema
+never removes that history by itself. Retention-policy metadata is the narrow
+exception and cascades with its target because it has no meaning on its own.
 
 `StoragePort` refuses to read or delete anything outside its configured root.
 Every path it receives was read back from the database, and a value in a
@@ -157,8 +234,8 @@ Flyway output, and H2 would misreport all three.
 
 No test may skip itself because something it needs is absent. A test that turns
 green by not running is worse than no test at all — so the integration tests
-assert that the `mysql` binary is present rather than assuming it, and CI
-installs it explicitly.
+assert that all MySQL and PostgreSQL client binaries are present rather than
+assuming it, and CI installs them explicitly.
 
 ## Database migrations
 
@@ -167,3 +244,13 @@ Flyway migrations live in `adapters/src/main/resources/db/migration/`, named
 never edited; a correction is a new migration. Hibernate runs with
 `ddl-auto: validate`, so a mapping that drifts from the schema fails at startup
 rather than in production.
+
+`V7` is the boundary between the single-engine history and the engine-routed
+model. It adds `database_targets.engine`, backfills every pre-existing row as
+`MYSQL`, then makes the column non-null. Its integration test migrates a real
+database only to V6, inserts a target with backup and restore history, applies
+V7 and proves the ciphertext and history survived.
+
+`V8` adds durable backup schedules. Their target foreign key is restrictive:
+a schedule must be deliberately deleted before its target can be removed.
+Case-folded, trimmed names are unique just as target names are.

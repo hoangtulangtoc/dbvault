@@ -32,8 +32,10 @@ import dev.dbvault.application.target.ManageDatabaseTargetService;
 import dev.dbvault.core.exception.RestoreFailedException;
 import dev.dbvault.core.model.BackupExecution;
 import dev.dbvault.core.model.DatabaseTarget;
+import dev.dbvault.core.model.DatabaseEngine;
 import dev.dbvault.core.model.RestoreExecution;
 import dev.dbvault.core.port.BackupExecutionRepository;
+import dev.dbvault.core.port.HistoryPage;
 import dev.dbvault.core.port.RestoreExecutionRepository;
 import dev.dbvault.web.security.SecurityConfig;
 
@@ -44,8 +46,10 @@ import dev.dbvault.web.security.SecurityConfig;
 class RestoreControllerTest {
 
     private static final Instant STARTED = Instant.parse("2026-09-09T10:00:00Z");
+    private static final String SHA256 = "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08";
     private static final UUID TARGET_ID = UUID.randomUUID();
     private static final UUID BACKUP_ID = UUID.randomUUID();
+    private static final UUID DRILL_ID = UUID.randomUUID();
 
     @Autowired private MockMvc mockMvc;
 
@@ -84,7 +88,7 @@ class RestoreControllerTest {
     void startsTheRestoreWhenTheTargetNameIsTypedExactly() throws Exception {
         givenBackupAndTarget();
         UUID restoreId = UUID.randomUUID();
-        when(restoreService.start(BACKUP_ID)).thenReturn(restoreId);
+        when(restoreService.start(BACKUP_ID, TARGET_ID)).thenReturn(restoreId);
 
         mockMvc.perform(post("/restores").with(csrf())
                         .param("backup", BACKUP_ID.toString())
@@ -96,14 +100,14 @@ class RestoreControllerTest {
     @Test
     void acceptsSurroundingWhitespaceInTheConfirmation() throws Exception {
         givenBackupAndTarget();
-        when(restoreService.start(BACKUP_ID)).thenReturn(UUID.randomUUID());
+        when(restoreService.start(BACKUP_ID, TARGET_ID)).thenReturn(UUID.randomUUID());
 
         mockMvc.perform(post("/restores").with(csrf())
                         .param("backup", BACKUP_ID.toString())
                         .param("confirmation", "  production  "))
                 .andExpect(status().is3xxRedirection());
 
-        verify(restoreService).start(BACKUP_ID);
+        verify(restoreService).start(BACKUP_ID, TARGET_ID);
     }
 
     @Test
@@ -117,7 +121,7 @@ class RestoreControllerTest {
                 .andExpect(redirectedUrl("/restores/new?backup=" + BACKUP_ID))
                 .andExpect(flash().attribute("error", containsString("Type the target's name exactly")));
 
-        verify(restoreService, never()).start(any());
+        verify(restoreService, never()).start(any(), any());
     }
 
     @Test
@@ -127,13 +131,13 @@ class RestoreControllerTest {
         mockMvc.perform(post("/restores").with(csrf()).param("backup", BACKUP_ID.toString()))
                 .andExpect(status().is3xxRedirection());
 
-        verify(restoreService, never()).start(any());
+        verify(restoreService, never()).start(any(), any());
     }
 
     @Test
     void reportsWhenTheBackupCannotBeRestored() throws Exception {
         givenBackupAndTarget();
-        when(restoreService.start(BACKUP_ID))
+        when(restoreService.start(BACKUP_ID, TARGET_ID))
                 .thenThrow(new RestoreFailedException("That backup is FAILED, so there is nothing to restore"));
 
         mockMvc.perform(post("/restores").with(csrf())
@@ -142,6 +146,143 @@ class RestoreControllerTest {
                 .andExpect(status().is3xxRedirection())
                 .andExpect(redirectedUrl("/executions/" + BACKUP_ID))
                 .andExpect(flash().attribute("error", containsString("nothing to restore")));
+    }
+
+    // --- into another target (ADR-014) --------------------------------------
+
+    @Test
+    void theConfirmationPageOffersEveryTargetAndPreselectsTheSource() throws Exception {
+        givenBackupAndTargets();
+
+        mockMvc.perform(get("/restores/new").param("backup", BACKUP_ID.toString()))
+                .andExpect(content().string(containsString("data-autosubmit")))
+                .andExpect(content().string(containsString("production — 127.0.0.1:3306/shop (where it was taken)")))
+                .andExpect(content().string(containsString("drill — scratch:3306/shop_drill")))
+                .andExpect(content().string(containsString("value=\"" + TARGET_ID + "\" selected")))
+                .andExpect(content().string(containsString("name=\"target\" value=\"" + TARGET_ID + "\"")));
+    }
+
+    @Test
+    void theConfirmationPageOffersOnlyTargetsFromTheBackupsEngine() throws Exception {
+        DatabaseTarget postgres = postgresTarget();
+        when(backups.findById(BACKUP_ID)).thenReturn(Optional.of(backup()));
+        when(targets.listAll()).thenReturn(List.of(target(), drill(), postgres));
+
+        mockMvc.perform(get("/restores/new").param("backup", BACKUP_ID.toString()))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("drill — scratch:3306/shop_drill")))
+                .andExpect(content().string(org.hamcrest.Matchers.not(
+                        containsString(postgres.getId().toString()))));
+    }
+
+    @Test
+    void choosingATargetFromAnotherEngineIsRejected() throws Exception {
+        DatabaseTarget postgres = postgresTarget();
+        when(backups.findById(BACKUP_ID)).thenReturn(Optional.of(backup()));
+        when(targets.listAll()).thenReturn(List.of(target(), postgres));
+
+        mockMvc.perform(get("/restores/new")
+                        .param("backup", BACKUP_ID.toString())
+                        .param("target", postgres.getId().toString()))
+                .andExpect(redirectedUrl("/restores/new?backup=" + BACKUP_ID))
+                .andExpect(flash().attribute("error", "Choose a MySQL target for this backup"));
+    }
+
+    /** Everything that names the overwritten schema follows the choice. */
+    @Test
+    void choosingAnotherTargetMakesThePageAboutThatTarget() throws Exception {
+        givenBackupAndTargets();
+
+        mockMvc.perform(get("/restores/new")
+                        .param("backup", BACKUP_ID.toString())
+                        .param("target", DRILL_ID.toString()))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("recreated in\n      <code>scratch:3306/shop_drill</code>")))
+                .andExpect(content().string(containsString("Type <strong>drill</strong> to confirm")))
+                .andExpect(content().string(containsString("which is not touched")))
+                .andExpect(content().string(containsString("name=\"target\" value=\"" + DRILL_ID + "\"")));
+    }
+
+    @Test
+    void startsARestoreIntoTheChosenTargetOnItsOwnName() throws Exception {
+        givenBackupAndTargets();
+        UUID restoreId = UUID.randomUUID();
+        when(restoreService.start(BACKUP_ID, DRILL_ID)).thenReturn(restoreId);
+
+        mockMvc.perform(post("/restores").with(csrf())
+                        .param("backup", BACKUP_ID.toString())
+                        .param("target", DRILL_ID.toString())
+                        .param("confirmation", "drill"))
+                .andExpect(redirectedUrl("/restores/" + restoreId));
+    }
+
+    /** The source's name does not confirm overwriting a different target. */
+    @Test
+    void theSourcesNameDoesNotConfirmARestoreIntoAnotherTarget() throws Exception {
+        givenBackupAndTargets();
+
+        mockMvc.perform(post("/restores").with(csrf())
+                        .param("backup", BACKUP_ID.toString())
+                        .param("target", DRILL_ID.toString())
+                        .param("confirmation", "production"))
+                .andExpect(redirectedUrl("/restores/new?backup=" + BACKUP_ID + "&target=" + DRILL_ID))
+                .andExpect(flash().attribute("error", containsString("'drill'")));
+
+        verify(restoreService, never()).start(any(), any());
+    }
+
+    @Test
+    void aChosenTargetRemovedInAnotherTabFallsBackToTheDefault() throws Exception {
+        givenBackupAndTarget();
+
+        mockMvc.perform(get("/restores/new")
+                        .param("backup", BACKUP_ID.toString())
+                        .param("target", UUID.randomUUID().toString()))
+                .andExpect(redirectedUrl("/restores/new?backup=" + BACKUP_ID))
+                .andExpect(flash().attribute("error", "That target no longer exists"));
+    }
+
+    @Test
+    void theDetailSaysWhereTheDataWentAndWhereTheBackupCameFrom() throws Exception {
+        RestoreExecution restore = RestoreExecution.started(UUID.randomUUID(), BACKUP_ID, DRILL_ID, STARTED)
+                .succeeded(STARTED.plusSeconds(30));
+        when(restores.findById(restore.getId())).thenReturn(Optional.of(restore));
+        when(backups.findById(BACKUP_ID)).thenReturn(Optional.of(backup()));
+        when(targets.listAll()).thenReturn(List.of(target(), drill()));
+
+        mockMvc.perform(get("/restores/{id}", restore.getId()))
+                .andExpect(content().string(containsString("<h1>drill</h1>")))
+                .andExpect(content().string(org.hamcrest.Matchers.matchesPattern(
+                        "(?s).*<dt>Taken from</dt>\\s*<dd>production</dd>.*")));
+    }
+
+    @Test
+    void theListSaysIntoWhichTargetEachRestoreWent() throws Exception {
+        RestoreExecution restore = RestoreExecution.started(UUID.randomUUID(), BACKUP_ID, DRILL_ID, STARTED);
+        when(restores.findNewestFirst(1, 50)).thenReturn(new HistoryPage<>(List.of(restore), 1, false));
+        when(backups.findAllById(List.of(BACKUP_ID))).thenReturn(List.of(backup()));
+        when(targets.listAll()).thenReturn(List.of(target(), drill()));
+
+        mockMvc.perform(get("/restores"))
+                .andExpect(content().string(org.hamcrest.Matchers.matchesPattern(
+                        "(?s).*<td data-label=\"Into\">drill</td>.*")))
+                .andExpect(content().string(containsString("of production")));
+    }
+
+    /** Only the backups this page mentions are read, not the whole history. */
+    @Test
+    void theListIsPagedAndReadsOnlyTheBackupsItShows() throws Exception {
+        RestoreExecution restore = RestoreExecution.started(UUID.randomUUID(), BACKUP_ID, TARGET_ID, STARTED);
+        when(restores.findNewestFirst(2, 50)).thenReturn(new HistoryPage<>(List.of(restore), 2, false));
+        when(backups.findAllById(List.of(BACKUP_ID))).thenReturn(List.of(backup()));
+        when(targets.listAll()).thenReturn(List.of(target()));
+
+        mockMvc.perform(get("/restores").param("page", "2"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("href=\"/restores?page=1\"")))
+                .andExpect(content().string(containsString("of production")));
+
+        verify(backups).findAllById(List.of(BACKUP_ID));
     }
 
     @Test
@@ -155,8 +296,7 @@ class RestoreControllerTest {
 
     @Test
     void showsAnEmptyStateWhenNothingHasBeenRestored() throws Exception {
-        when(restores.findAllNewestFirst()).thenReturn(List.of());
-        when(backups.findAllNewestFirst()).thenReturn(List.of());
+        when(restores.findNewestFirst(1, 50)).thenReturn(new HistoryPage<>(List.of(), 1, false));
         when(targets.listAll()).thenReturn(List.of());
 
         mockMvc.perform(get("/restores"))
@@ -166,7 +306,7 @@ class RestoreControllerTest {
 
     @Test
     void detailShowsTheFailureVerbatim() throws Exception {
-        RestoreExecution restore = RestoreExecution.started(UUID.randomUUID(), BACKUP_ID, STARTED)
+        RestoreExecution restore = RestoreExecution.started(UUID.randomUUID(), BACKUP_ID, TARGET_ID, STARTED)
                 .failed("mysql exited with 1: ERROR 1142 at line 40", STARTED.plusSeconds(9));
         when(restores.findById(restore.getId())).thenReturn(Optional.of(restore));
         when(backups.findById(BACKUP_ID)).thenReturn(Optional.of(backup()));
@@ -184,7 +324,7 @@ class RestoreControllerTest {
     /** Followed until it finishes, like a running backup (ADR-010). */
     @Test
     void detailOfARunningRestoreIsFollowed() throws Exception {
-        RestoreExecution restore = RestoreExecution.started(UUID.randomUUID(), BACKUP_ID, STARTED);
+        RestoreExecution restore = RestoreExecution.started(UUID.randomUUID(), BACKUP_ID, TARGET_ID, STARTED);
         when(restores.findById(restore.getId())).thenReturn(Optional.of(restore));
         when(backups.findById(BACKUP_ID)).thenReturn(Optional.of(backup()));
         when(targets.listAll()).thenReturn(List.of(target()));
@@ -213,13 +353,34 @@ class RestoreControllerTest {
         when(targets.listAll()).thenReturn(List.of(target()));
     }
 
+    private void givenBackupAndTargets() {
+        when(backups.findById(BACKUP_ID)).thenReturn(Optional.of(backup()));
+        when(targets.listAll()).thenReturn(List.of(target(), drill()));
+    }
+
+    private static DatabaseTarget drill() {
+        return DatabaseTarget.builder().engine(dev.dbvault.core.model.DatabaseEngine.MYSQL)
+                .id(DRILL_ID).name("drill").host("scratch").port(3306)
+                .databaseName("shop_drill").username("drill")
+                .passwordCiphertext("ZHJpbGw=").createdAt(STARTED)
+                .build();
+    }
+
+    private static DatabaseTarget postgresTarget() {
+        return DatabaseTarget.builder().engine(DatabaseEngine.POSTGRESQL)
+                .id(UUID.randomUUID()).name("analytics").host("postgres.internal").port(5432)
+                .databaseName("warehouse").username("backup")
+                .passwordCiphertext("cG9zdGdyZXM=").createdAt(STARTED)
+                .build();
+    }
+
     private static BackupExecution backup() {
         return BackupExecution.started(BACKUP_ID, TARGET_ID, STARTED)
-                .succeeded("/backups/shop_20260909_100000.sql.gz", 8192L, STARTED.plusSeconds(60));
+                .succeeded("/backups/shop_20260909_100000.sql.gz", 8192L, SHA256, STARTED.plusSeconds(60));
     }
 
     private static DatabaseTarget target() {
-        return DatabaseTarget.builder()
+        return DatabaseTarget.builder().engine(dev.dbvault.core.model.DatabaseEngine.MYSQL)
                 .id(TARGET_ID).name("production").host("127.0.0.1").port(3306)
                 .databaseName("shop").username("backup")
                 .passwordCiphertext("Y2lwaGVydGV4dA==").createdAt(STARTED)

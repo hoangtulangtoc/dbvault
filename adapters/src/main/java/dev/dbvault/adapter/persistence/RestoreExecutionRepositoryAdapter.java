@@ -1,15 +1,19 @@
 package dev.dbvault.adapter.persistence;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Slice;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import dev.dbvault.core.model.ExecutionStatus;
 import dev.dbvault.core.model.RestoreExecution;
+import dev.dbvault.core.port.HistoryPage;
 import dev.dbvault.core.port.RestoreExecutionRepository;
 
 import lombok.RequiredArgsConstructor;
@@ -35,10 +39,12 @@ class RestoreExecutionRepositoryAdapter implements RestoreExecutionRepository {
     }
 
     @Override
-    public List<RestoreExecution> findAllNewestFirst() {
-        return jpaRepository.findAll(NEWEST_FIRST).stream()
-                .map(RestoreExecutionRepositoryAdapter::toDomain)
-                .toList();
+    public HistoryPage<RestoreExecution> findNewestFirst(int page, int pageSize) {
+        Slice<RestoreExecutionEntity> slice = jpaRepository.findAllBy(PageRequest.of(page - 1, pageSize, NEWEST_FIRST));
+        return new HistoryPage<>(
+                slice.getContent().stream().map(RestoreExecutionRepositoryAdapter::toDomain).toList(),
+                page,
+                slice.hasNext());
     }
 
     @Override
@@ -54,9 +60,27 @@ class RestoreExecutionRepositoryAdapter implements RestoreExecutionRepository {
     }
 
     @Override
+    public long countForBackups(Collection<UUID> backupExecutionIds) {
+        // An empty IN list is not something to trust every dialect with.
+        return backupExecutionIds.isEmpty() ? 0 : jpaRepository.countByBackupExecutionIdIn(backupExecutionIds);
+    }
+
+    @Override
+    public long countInvolvingTarget(UUID targetId) {
+        return jpaRepository.countInvolvingTarget(targetId);
+    }
+
+    @Override
     @Transactional
     public void deleteForBackup(UUID backupExecutionId) {
         jpaRepository.deleteByBackupExecutionId(backupExecutionId);
+        jpaRepository.flush();
+    }
+
+    @Override
+    @Transactional
+    public void deleteForTarget(UUID targetId) {
+        jpaRepository.deleteByTargetId(targetId);
         jpaRepository.flush();
     }
 
@@ -64,6 +88,7 @@ class RestoreExecutionRepositoryAdapter implements RestoreExecutionRepository {
         RestoreExecutionEntity entity = new RestoreExecutionEntity();
         entity.setId(execution.getId());
         entity.setBackupExecutionId(execution.getBackupExecutionId());
+        entity.setTargetId(execution.getTargetId());
         entity.setStatus(execution.getStatus());
         entity.setStartedAt(execution.getStartedAt());
         entity.setFinishedAt(execution.getFinishedAt());
@@ -75,6 +100,7 @@ class RestoreExecutionRepositoryAdapter implements RestoreExecutionRepository {
         return RestoreExecution.builder()
                 .id(entity.getId())
                 .backupExecutionId(entity.getBackupExecutionId())
+                .targetId(entity.getTargetId())
                 .status(entity.getStatus())
                 .startedAt(entity.getStartedAt())
                 .finishedAt(entity.getFinishedAt())

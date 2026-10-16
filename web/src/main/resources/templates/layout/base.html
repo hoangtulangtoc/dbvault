@@ -2,8 +2,9 @@
 <!--
   The page shell. Every view calls it as
     th:replace="~{layout/base :: page('Title', 'section', ~{:: #content})}"
-  where `section` is the nav entry the page belongs to — 'targets', 'backups'
-  or 'restores' — and drives the highlighted sidebar item and the breadcrumb.
+  where `section` is the nav entry the page belongs to — 'targets',
+  'schedules', 'retention', 'backups' or 'restores' — and drives the
+  highlighted sidebar item and the breadcrumb.
 
   The error page passes 'error': it belongs to no section, and it shows no
   flash. Spring's error model carries an `error` attribute of its own (the
@@ -15,8 +16,8 @@
   same theme, styles and script.
 -->
 <html lang="en" xmlns:th="http://www.thymeleaf.org" th:fragment="page(title, section, content)"
-      th:with="sectionLabel=${section == 'targets' ? 'Targets' : (section == 'backups' ? 'Backups' : (section == 'restores' ? 'Restores' : null))},
-               sectionUrl=${section == 'backups' ? '/executions' : (section == 'restores' ? '/restores' : '/databases')},
+      th:with="sectionLabel=${section == 'targets' ? 'Targets' : (section == 'storage' ? 'Storage' : (section == 'schedules' ? 'Schedules' : (section == 'retention' ? 'Retention' : (section == 'backups' ? 'Backups' : (section == 'restores' ? 'Restores' : null)))))},
+               sectionUrl=${section == 'storage' ? '/storage' : (section == 'schedules' ? '/schedules' : (section == 'retention' ? '/retention' : (section == 'backups' ? '/executions' : (section == 'restores' ? '/restores' : '/databases'))))},
                showFlash=${section != 'error'}">
 <head th:fragment="head(title)">
   <meta charset="utf-8">
@@ -52,6 +53,15 @@
         <a class="nav-item" th:href="@{/databases}"
            th:classappend="${section == 'targets'} ? 'active'"
            th:attr="aria-current=${section == 'targets' ? 'page' : null}"><span aria-hidden="true">◎</span>Targets</a>
+        <a class="nav-item" th:href="@{/storage}"
+           th:classappend="${section == 'storage'} ? 'active'"
+           th:attr="aria-current=${section == 'storage' ? 'page' : null}"><span aria-hidden="true">▣</span>Storage</a>
+        <a class="nav-item" th:href="@{/schedules}"
+           th:classappend="${section == 'schedules'} ? 'active'"
+           th:attr="aria-current=${section == 'schedules' ? 'page' : null}"><span aria-hidden="true">◷</span>Schedules</a>
+        <a class="nav-item" th:href="@{/retention}"
+           th:classappend="${section == 'retention'} ? 'active'"
+           th:attr="aria-current=${section == 'retention' ? 'page' : null}"><span aria-hidden="true">⌛</span>Retention</a>
       </div>
       <div class="nav-group">
         <div class="nav-label">Operations</div>
@@ -71,7 +81,7 @@
         <span class="signed-in-label">Signed in as <strong th:text="${operatorName}">admin</strong></span>
         <button class="button button-small button-ghost" type="submit" data-busy-label="Signing out…">Sign out</button>
       </form>
-      <span class="sidebar-tagline">MySQL logical backup</span>
+      <span class="sidebar-tagline">Logical database backup</span>
       <button class="theme-toggle" type="button" data-theme-toggle>
         <span data-theme-icon aria-hidden="true">☀</span><span data-theme-label>Light theme</span>
       </button>

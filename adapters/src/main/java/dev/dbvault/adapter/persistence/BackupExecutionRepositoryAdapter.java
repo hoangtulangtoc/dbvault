@@ -1,15 +1,19 @@
 package dev.dbvault.adapter.persistence;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Slice;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Component;
 
 import dev.dbvault.core.model.BackupExecution;
 import dev.dbvault.core.model.ExecutionStatus;
 import dev.dbvault.core.port.BackupExecutionRepository;
+import dev.dbvault.core.port.HistoryPage;
 
 import lombok.RequiredArgsConstructor;
 
@@ -44,6 +48,23 @@ class BackupExecutionRepositoryAdapter implements BackupExecutionRepository {
     }
 
     @Override
+    public List<BackupExecution> findAllForTarget(UUID targetId) {
+        return jpaRepository.findByTargetId(targetId).stream().map(BackupExecutionMapper::toDomain).toList();
+    }
+
+    @Override
+    public long countForStorageProfile(UUID storageProfileId) {
+        return jpaRepository.countByStorageProfileId(storageProfileId);
+    }
+
+    @Override
+    public List<BackupExecution> findRetentionCandidates(UUID targetId, int keepSuccessful) {
+        return jpaRepository.findRetentionCandidates(targetId, keepSuccessful).stream()
+                .map(BackupExecutionMapper::toDomain)
+                .toList();
+    }
+
+    @Override
     public void deleteById(UUID id) {
         jpaRepository.deleteById(id);
         // Flushed so a foreign key still holding this row surfaces here rather
@@ -52,9 +73,26 @@ class BackupExecutionRepositoryAdapter implements BackupExecutionRepository {
     }
 
     @Override
-    public List<BackupExecution> findAllNewestFirst() {
-        return jpaRepository.findAll(NEWEST_FIRST).stream()
-                .map(BackupExecutionMapper::toDomain)
-                .toList();
+    public HistoryPage<BackupExecution> findNewestFirst(int page, int pageSize) {
+        Slice<BackupExecutionEntity> slice = jpaRepository.findAllBy(PageRequest.of(page - 1, pageSize, NEWEST_FIRST));
+        return new HistoryPage<>(
+                slice.getContent().stream().map(BackupExecutionMapper::toDomain).toList(),
+                page,
+                slice.hasNext());
+    }
+
+    @Override
+    public List<BackupExecution> findLatestPerTarget() {
+        return jpaRepository.findLatestPerTarget().stream().map(BackupExecutionMapper::toDomain).toList();
+    }
+
+    @Override
+    public List<BackupExecution> findLatestSucceededPerTarget() {
+        return jpaRepository.findLatestSucceededPerTarget().stream().map(BackupExecutionMapper::toDomain).toList();
+    }
+
+    @Override
+    public List<BackupExecution> findAllById(Collection<UUID> ids) {
+        return jpaRepository.findAllById(ids).stream().map(BackupExecutionMapper::toDomain).toList();
     }
 }

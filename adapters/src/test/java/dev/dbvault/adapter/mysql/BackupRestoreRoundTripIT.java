@@ -18,9 +18,10 @@ import org.testcontainers.mysql.MySQLContainer;
 
 import dev.dbvault.adapter.process.ProcessRunner;
 import dev.dbvault.core.exception.RestoreFailedException;
-import dev.dbvault.core.model.MysqlConnection;
-import dev.dbvault.core.port.MysqlLogicalBackupPort;
-import dev.dbvault.core.port.MysqlLogicalRestorePort;
+import dev.dbvault.core.model.DatabaseConnection;
+import dev.dbvault.core.model.DatabaseEngine;
+import dev.dbvault.core.port.LogicalBackupPort;
+import dev.dbvault.core.port.LogicalRestorePort;
 
 /**
  * The test this project exists for: back up a real schema, destroy it, restore
@@ -44,8 +45,8 @@ class BackupRestoreRoundTripIT {
     @TempDir
     Path artifacts;
 
-    private MysqlLogicalBackupPort backup;
-    private MysqlLogicalRestorePort restore;
+    private LogicalBackupPort backup;
+    private LogicalRestorePort restore;
 
     @BeforeAll
     static void requireTheBinaries() {
@@ -142,6 +143,33 @@ class BackupRestoreRoundTripIT {
         assertThat(query("SELECT COUNT(*) FROM audit")).isEqualTo("1");
     }
 
+    /**
+     * What ADR-005 kept the dump free of {@code CREATE DATABASE} and {@code USE}
+     * for, and ADR-014 relies on: a backup of {@code shop} loads into a schema
+     * with another name, and {@code shop} itself is not touched.
+     */
+    @Test
+    void restoresIntoASchemaWithAnotherNameLeavingTheSourceAlone() {
+        rootSql("""
+            DROP DATABASE IF EXISTS shop_drill; CREATE DATABASE shop_drill;
+            GRANT ALL ON shop_drill.* TO 'backup'@'%';
+            """);
+        Path artifact = artifacts.resolve("shop.sql.gz");
+        String before = query("SELECT GROUP_CONCAT(CONCAT(id,':',customer,':',total) ORDER BY id) FROM orders");
+        backup.dumpTo(connection("s3cr3t"), artifact);
+        sql("INSERT INTO orders (customer, total) VALUES ('Only in the source', 1.00);");
+
+        restore.restore(new DatabaseConnection(DatabaseEngine.MYSQL,
+                SERVER.getHost(), SERVER.getFirstMappedPort(), "shop_drill", "backup", "s3cr3t"), artifact);
+
+        assertThat(queryIn("shop_drill",
+                "SELECT GROUP_CONCAT(CONCAT(id,':',customer,':',total) ORDER BY id) FROM orders"))
+                .isEqualTo(before);
+        assertThat(queryIn("shop_drill", "SELECT COUNT(*) FROM items")).isEqualTo("3");
+        // The source keeps the row added after the backup: nothing went there.
+        assertThat(query("SELECT COUNT(*) FROM orders")).isEqualTo("4");
+    }
+
     @Test
     void aBackupCanBeRestoredMoreThanOnce() {
         Path artifact = artifacts.resolve("shop.sql.gz");
@@ -179,30 +207,73 @@ class BackupRestoreRoundTripIT {
                 .hasMessageContaining("Could not read the backup artifact");
     }
 
-    /** The decompressed copy is large; it must not be left behind. */
+    /**
+     * A dump far larger than a pipe buffer goes through the client's stdin
+     * whole: the rows are all there, not the first 64 KiB of them.
+     */
     @Test
-    void removesItsTemporaryFileWhateverHappens() throws Exception {
+    void restoresADumpFarLargerThanAPipe() {
+        sql("""
+            SET SESSION cte_max_recursion_depth = 50000;
+            INSERT INTO items (order_id, sku)
+                WITH RECURSIVE seq (n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM seq WHERE n < 40000)
+                SELECT n, CONCAT('SKU-', n) FROM seq;
+            """);
+        Path artifact = artifacts.resolve("shop.sql.gz");
+        backup.dumpTo(connection("s3cr3t"), artifact);
+        sql("DROP TABLE items;");
+
+        restore.restore(connection("s3cr3t"), artifact);
+
+        assertThat(query("SELECT COUNT(*) FROM items")).isEqualTo("40003");
+        assertThat(query("SELECT sku FROM items ORDER BY id DESC LIMIT 1"))
+                .isEqualTo("SKU-40000");
+    }
+
+    /**
+     * What the temporary file used to guarantee, and the archive check now
+     * does: an archive that stops halfway is found out before the client
+     * starts, so not one statement of it reaches the target.
+     */
+    @Test
+    void refusesATruncatedArchiveWithoutTouchingTheTarget() throws Exception {
+        Path artifact = artifacts.resolve("shop.sql.gz");
+        backup.dumpTo(connection("s3cr3t"), artifact);
+        byte[] whole = Files.readAllBytes(artifact);
+        Files.write(artifact, java.util.Arrays.copyOf(whole, whole.length / 2));
+        sql("INSERT INTO orders (customer, total) VALUES ('Added later', 1.00);");
+
+        assertThatThrownBy(() -> restore.restore(connection("s3cr3t"), artifact))
+                .isInstanceOf(RestoreFailedException.class)
+                .hasMessageContaining("Could not read the backup artifact")
+                .hasMessageContaining("Nothing was restored");
+
+        // The dump would have recreated the table without this row.
+        assertThat(query("SELECT COUNT(*) FROM orders")).isEqualTo("4");
+    }
+
+    /** No decompressed copy is written anywhere beside the archive, whatever the outcome. */
+    @Test
+    void writesNothingBesideTheArtifact() throws Exception {
         Path artifact = artifacts.resolve("shop.sql.gz");
         backup.dumpTo(connection("s3cr3t"), artifact);
 
         restore.restore(connection("s3cr3t"), artifact);
-        assertThat(temporaryFiles()).isEmpty();
+        assertThat(filesBesideTheArtifact()).containsExactly("shop.sql.gz");
 
         assertThatThrownBy(() -> restore.restore(connection("wrong"), artifact))
                 .isInstanceOf(RestoreFailedException.class);
-        assertThat(temporaryFiles()).isEmpty();
+        assertThat(filesBesideTheArtifact()).containsExactly("shop.sql.gz");
     }
 
-    private List<String> temporaryFiles() throws Exception {
+    private List<String> filesBesideTheArtifact() throws Exception {
         try (var files = Files.list(artifacts)) {
-            return files.map(p -> p.getFileName().toString())
-                    .filter(name -> name.contains(".restore.sql"))
-                    .toList();
+            return files.map(p -> p.getFileName().toString()).toList();
         }
     }
 
-    private static MysqlConnection connection(String password) {
-        return new MysqlConnection(
+    private static DatabaseConnection connection(String password) {
+        return new DatabaseConnection(DatabaseEngine.MYSQL,
                 SERVER.getHost(), SERVER.getFirstMappedPort(), "shop", "backup", password);
     }
 
@@ -213,7 +284,11 @@ class BackupRestoreRoundTripIT {
     }
 
     private static String query(String sql) {
-        return exec("mysql", "-uroot", "-p" + SERVER.getPassword(), "shop",
+        return queryIn("shop", sql);
+    }
+
+    private static String queryIn(String schema, String sql) {
+        return exec("mysql", "-uroot", "-p" + SERVER.getPassword(), schema,
                 "-N", "--batch", "-e", sql).strip();
     }
 
