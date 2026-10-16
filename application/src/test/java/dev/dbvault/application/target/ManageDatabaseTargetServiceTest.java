@@ -33,6 +33,7 @@ import dev.dbvault.core.model.BackupExecution;
 import dev.dbvault.core.model.DatabaseTarget;
 import dev.dbvault.core.model.RestoreExecution;
 import dev.dbvault.core.port.BackupExecutionRepository;
+import dev.dbvault.core.port.BackupScheduleRepository;
 import dev.dbvault.core.port.DatabaseTargetRepository;
 import dev.dbvault.core.port.EncryptionPort;
 import dev.dbvault.core.port.RestoreExecutionRepository;
@@ -57,6 +58,9 @@ class ManageDatabaseTargetServiceTest {
     private RestoreExecutionRepository restores;
 
     @Mock
+    private BackupScheduleRepository schedules;
+
+    @Mock
     private BackupArtifactService artifacts;
 
     @Mock
@@ -70,7 +74,7 @@ class ManageDatabaseTargetServiceTest {
     @BeforeEach
     void setUp() {
         service = new ManageDatabaseTargetService(
-                repository, backups, restores, artifacts, encryption, Clock.fixed(NOW, ZoneOffset.UTC));
+                repository, backups, restores, schedules, artifacts, encryption, Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
     @Test
@@ -315,6 +319,19 @@ class ManageDatabaseTargetServiceTest {
                 .thenReturn(new BulkDeletionPreview(List.of(), 0, 0L, 0L, "One of these backups is still running."));
 
         assertThat(service.previewRemoval(target.getId()).refusal()).contains("still running");
+    }
+
+    @Test
+    void refusesRemovalWhileTheTargetHasSchedules() {
+        DatabaseTarget target = stored();
+        when(repository.findById(target.getId())).thenReturn(Optional.of(target));
+        when(schedules.countForTarget(target.getId())).thenReturn(2L);
+
+        assertThatThrownBy(() -> service.delete(target.getId(), true))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("2 backup schedules");
+
+        verify(repository, never()).deleteById(any());
     }
 
     private static RegisterTargetCommand command() {
