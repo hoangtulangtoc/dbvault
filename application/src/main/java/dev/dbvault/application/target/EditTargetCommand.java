@@ -20,11 +20,18 @@ public record EditTargetCommand(
         int port,
         String username,
         String password,
+        String authenticationDatabase,
         UUID storageProfileId) {
 
     /** An edit that leaves the storage destination where it is. */
+    public EditTargetCommand(String name, String host, int port, String username, String password,
+            String authenticationDatabase) {
+        this(name, host, port, username, password, authenticationDatabase, null);
+    }
+
+    /** An edit of a SQL target that leaves the storage destination where it is. */
     public EditTargetCommand(String name, String host, int port, String username, String password) {
-        this(name, host, port, username, password, null);
+        this(name, host, port, username, password, null, null);
     }
 
     public boolean changesPassword() {

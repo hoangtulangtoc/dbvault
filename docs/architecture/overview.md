@@ -97,10 +97,11 @@ once:
   `GZIPOutputStream`'s trailer is written on close, and that belongs to whoever
   opened it. If the sink cannot be written to, the child is killed at once
   rather than left blocked on a pipe until the timeout.
-- **Credentials travel in `ProcessBuilder.environment()`** as `MYSQL_PWD` or
-  `PGPASSWORD`. Never on the command line, where `ps` shows them to every user
-  on the host, and never through `System.setProperty`, which is JVM-global and
-  would leak between jobs running at the same time.
+- **Credentials never travel on the command line.** MySQL and PostgreSQL use
+  per-child environment variables (`MYSQL_PWD` and `PGPASSWORD`). MongoDB
+  Database Tools have no equivalent, so each invocation gets a unique YAML
+  config file created as `0600` and deleted as soon as the child exits. Nothing
+  uses `System.setProperty`, which is JVM-global and would leak between jobs.
 
 `MysqlClient` adds the MySQL-specific knowledge: it rewrites the literal host
 `localhost` to `127.0.0.1`, because the client otherwise connects over a Unix
@@ -114,6 +115,12 @@ set `PGCONNECT_TIMEOUT`. `PostgresDumpBackupAdapter` writes a custom-format
 archive directly to its destination; `PostgresRestoreAdapter` lists that
 archive before starting a destructive restore. Each configured binary is
 checked for executability when its adapter is constructed.
+
+The MongoDB adapters pass an explicit authentication database separately from
+the database being backed up. `mongodump` writes a gzip-compressed archive;
+`mongorestore` dry-runs it before applying it and rewrites the source namespace
+when the destination database has another name. See
+[ADR-018](../adr/018-mongodb-archives-and-explicit-authentication-database.md).
 
 The use cases do not know those commands. `DatabaseConnection` carries the
 short-lived plaintext credential and `EngineAdapterRegistry` selects a
@@ -138,7 +145,8 @@ are separate on purpose — see
    `ArtifactStorageService` for a local destination or private staging path.
    It writes a provider-neutral artifact reference onto the same row. MySQL streams
    gzipped SQL to `<database>_<timestamp>.sql.gz`; PostgreSQL writes a custom
-   archive to `<database>_<timestamp>.dump`.
+   archive to `<database>_<timestamp>.dump`; MongoDB writes a compressed archive
+   to `<database>_<timestamp>.archive.gz`.
 
 `ArtifactStorageService` is the only application router between local storage,
 staging and S3. A RUNNING execution snapshots the target's profile id. Local
@@ -234,8 +242,8 @@ Flyway output, and H2 would misreport all three.
 
 No test may skip itself because something it needs is absent. A test that turns
 green by not running is worse than no test at all — so the integration tests
-assert that all MySQL and PostgreSQL client binaries are present rather than
-assuming it, and CI installs them explicitly.
+assert that all MySQL, PostgreSQL and MongoDB client binaries are present rather
+than assuming it, and CI installs them explicitly.
 
 ## Database migrations
 
@@ -254,3 +262,7 @@ V7 and proves the ciphertext and history survived.
 `V8` adds durable backup schedules. Their target foreign key is restrictive:
 a schedule must be deliberately deleted before its target can be removed.
 Case-folded, trimmed names are unique just as target names are.
+
+`V11` adds MongoDB's nullable `authentication_database`, keeps it absent for
+existing SQL targets, and requires it for new MongoDB rows while widening the
+engine constraint to include `MONGODB`.
