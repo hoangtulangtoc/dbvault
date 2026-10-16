@@ -13,6 +13,7 @@ import dev.dbvault.core.exception.TargetInUseException;
 import dev.dbvault.core.model.BackupExecution;
 import dev.dbvault.core.model.DatabaseTarget;
 import dev.dbvault.core.port.BackupExecutionRepository;
+import dev.dbvault.core.port.BackupScheduleRepository;
 import dev.dbvault.core.port.DatabaseTargetRepository;
 import dev.dbvault.core.port.EncryptionPort;
 import dev.dbvault.core.port.RestoreExecutionRepository;
@@ -42,7 +43,11 @@ public class ManageDatabaseTargetService {
      * @param refusal      why it cannot be removed right now, or null if it can
      */
     public record TargetRemovalPreview(
-            DatabaseTarget target, BulkDeletionPreview backups, long restoreCount, String refusal) {
+            DatabaseTarget target,
+            BulkDeletionPreview backups,
+            long restoreCount,
+            long scheduleCount,
+            String refusal) {
 
         /** Whether its backups go too — the case that needs the name typed. */
         public boolean takesBackups() {
@@ -57,6 +62,7 @@ public class ManageDatabaseTargetService {
     private final DatabaseTargetRepository repository;
     private final BackupExecutionRepository backups;
     private final RestoreExecutionRepository restores;
+    private final BackupScheduleRepository schedules;
     private final BackupArtifactService artifacts;
     private final EncryptionPort encryption;
     private final Clock clock;
@@ -123,8 +129,15 @@ public class ManageDatabaseTargetService {
     public TargetRemovalPreview previewRemoval(UUID id) {
         DatabaseTarget target = get(id);
         BulkDeletionPreview ownBackups = artifacts.previewDeletions(idsOf(backups.findAllForTarget(id)));
+        long scheduleCount = schedules.countForTarget(id);
         String refusal = ownBackups.refused() ? ownBackups.refusal() : restoreIntoRefusal(id);
-        return new TargetRemovalPreview(target, ownBackups, restores.countInvolvingTarget(id), refusal);
+        if (refusal == null && scheduleCount > 0) {
+            refusal = scheduleCount == 1
+                    ? "Delete this target's backup schedule before removing it."
+                    : "Delete this target's %d backup schedules before removing it.".formatted(scheduleCount);
+        }
+        return new TargetRemovalPreview(
+                target, ownBackups, restores.countInvolvingTarget(id), scheduleCount, refusal);
     }
 
     /**
@@ -151,6 +164,12 @@ public class ManageDatabaseTargetService {
         List<UUID> backupIds = idsOf(backups.findAllForTarget(id));
         if (!backupIds.isEmpty() && !backupsConfirmed) {
             throw new TargetInUseException(target.getName());
+        }
+        long scheduleCount = schedules.countForTarget(id);
+        if (scheduleCount > 0) {
+            throw new IllegalStateException(scheduleCount == 1
+                    ? "Delete this target's backup schedule before removing it."
+                    : "Delete this target's %d backup schedules before removing it.".formatted(scheduleCount));
         }
         String refusal = restoreIntoRefusal(id);
         if (refusal != null) {
