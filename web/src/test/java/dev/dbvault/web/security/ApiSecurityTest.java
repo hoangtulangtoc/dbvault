@@ -38,6 +38,7 @@ class ApiSecurityTest {
 
     private static final Instant CREATED = Instant.parse("2026-10-01T08:00:00Z");
     private static final UUID SHOP = UUID.randomUUID();
+    private static final String SHA256 = "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08";
 
     @Autowired
     private MockMvc mockMvc;
@@ -83,7 +84,7 @@ class ApiSecurityTest {
     void listsOneTargetsBackupsNewestFirstWithoutTheirPath() throws Exception {
         UUID other = UUID.randomUUID();
         BackupExecution newer = BackupExecution.started(UUID.randomUUID(), SHOP, CREATED.plusSeconds(120))
-                .succeeded("/backups/shop.sql.gz", 2048, CREATED.plusSeconds(130));
+                .succeeded("/backups/shop.sql.gz", 2048, SHA256, CREATED.plusSeconds(130));
         BackupExecution foreign = BackupExecution.started(UUID.randomUUID(), other, CREATED.plusSeconds(90));
         BackupExecution older = BackupExecution.started(UUID.randomUUID(), SHOP, CREATED.plusSeconds(60))
                 .failed("Access denied", CREATED.plusSeconds(61));
@@ -95,6 +96,7 @@ class ApiSecurityTest {
                 .andExpect(jsonPath("$.length()").value(2))
                 .andExpect(jsonPath("$[0].status").value("SUCCEEDED"))
                 .andExpect(jsonPath("$[0].sizeBytes").value(2048))
+                .andExpect(jsonPath("$[0].sha256").value(SHA256))
                 .andExpect(jsonPath("$[0].artifactPath").doesNotExist())
                 .andExpect(jsonPath("$[1].error").value("Access denied"));
     }
