@@ -3,8 +3,9 @@ package dev.dbvault.adapter.mysql;
 import org.springframework.stereotype.Component;
 
 import dev.dbvault.adapter.process.ProcessRunner;
-import dev.dbvault.core.model.MysqlConnection;
-import dev.dbvault.core.port.MysqlConnectionTestPort;
+import dev.dbvault.core.model.DatabaseConnection;
+import dev.dbvault.core.model.DatabaseEngine;
+import dev.dbvault.core.port.ConnectionTestPort;
 
 import lombok.RequiredArgsConstructor;
 
@@ -19,12 +20,17 @@ import lombok.RequiredArgsConstructor;
  */
 @Component
 @RequiredArgsConstructor
-class MysqlCliConnectionTestAdapter implements MysqlConnectionTestPort {
+class MysqlCliConnectionTestAdapter implements ConnectionTestPort {
 
     private final MysqlClient client;
 
     @Override
-    public Result test(MysqlConnection connection) {
+    public DatabaseEngine engine() {
+        return DatabaseEngine.MYSQL;
+    }
+
+    @Override
+    public Result test(DatabaseConnection connection) {
         try {
             ProcessRunner.Result result = client.execute(connection, "SELECT 1");
             return result.succeeded()

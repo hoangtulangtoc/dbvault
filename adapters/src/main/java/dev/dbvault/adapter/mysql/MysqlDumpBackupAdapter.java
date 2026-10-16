@@ -16,8 +16,9 @@ import org.springframework.stereotype.Component;
 
 import dev.dbvault.adapter.process.ProcessRunner;
 import dev.dbvault.core.exception.BackupFailedException;
-import dev.dbvault.core.model.MysqlConnection;
-import dev.dbvault.core.port.MysqlLogicalBackupPort;
+import dev.dbvault.core.model.DatabaseConnection;
+import dev.dbvault.core.model.DatabaseEngine;
+import dev.dbvault.core.port.LogicalBackupPort;
 
 /**
  * Produces a logical dump by running {@code mysqldump}.
@@ -28,7 +29,7 @@ import dev.dbvault.core.port.MysqlLogicalBackupPort;
  * warning from filling its pipe and stalling the child.
  */
 @Component
-class MysqlDumpBackupAdapter implements MysqlLogicalBackupPort {
+class MysqlDumpBackupAdapter implements LogicalBackupPort {
 
     /**
      * Bigger than {@link GZIPOutputStream}'s 512-byte default. A dump is one
@@ -52,7 +53,17 @@ class MysqlDumpBackupAdapter implements MysqlLogicalBackupPort {
     }
 
     @Override
-    public long dumpTo(MysqlConnection connection, Path destination) {
+    public DatabaseEngine engine() {
+        return DatabaseEngine.MYSQL;
+    }
+
+    @Override
+    public String artifactSuffix() {
+        return ".sql.gz";
+    }
+
+    @Override
+    public long dumpTo(DatabaseConnection connection, Path destination) {
         ProcessRunner.Result result;
 
         // The gzip trailer is written when this stream closes, so the file is
@@ -80,7 +91,7 @@ class MysqlDumpBackupAdapter implements MysqlLogicalBackupPort {
         return sizeOf(destination);
     }
 
-    List<String> command(MysqlConnection connection) {
+    List<String> command(DatabaseConnection connection) {
         return List.of(
                 binary.toString(),
                 // See MysqlClient: a literal "localhost" makes the client use a

@@ -25,6 +25,7 @@ import dev.dbvault.core.exception.InvalidTargetException;
 import dev.dbvault.core.exception.TargetInUseException;
 import dev.dbvault.core.model.BackupExecution;
 import dev.dbvault.core.model.ConnectionCheck;
+import dev.dbvault.core.model.DatabaseEngine;
 import dev.dbvault.core.model.DatabaseTarget;
 import dev.dbvault.core.port.BackupExecutionRepository;
 import dev.dbvault.web.dto.DatabaseTargetForm;
@@ -50,6 +51,7 @@ public class DatabaseTargetController {
      */
     private static final Map<String, String> FORM_FIELDS = Map.of(
             "name", "name",
+            "engine", "engine",
             "host", "host",
             "port", "port",
             "databaseName", "database",
@@ -60,6 +62,11 @@ public class DatabaseTargetController {
     private final TestTargetConnectionService connectionTest;
     private final RunBackupService backups;
     private final BackupExecutionRepository executions;
+
+    @ModelAttribute("engines")
+    DatabaseEngine[] engines() {
+        return DatabaseEngine.values();
+    }
 
     /**
      * Beside each target, its newest backup attempt and its newest successful

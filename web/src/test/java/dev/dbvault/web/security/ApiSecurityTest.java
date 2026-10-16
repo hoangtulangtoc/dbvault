@@ -21,6 +21,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import dev.dbvault.application.target.ManageDatabaseTargetService;
 import dev.dbvault.core.model.BackupExecution;
+import dev.dbvault.core.model.DatabaseEngine;
 import dev.dbvault.core.model.DatabaseTarget;
 import dev.dbvault.core.port.BackupExecutionRepository;
 import dev.dbvault.web.api.TargetApiController;
@@ -50,7 +51,7 @@ class ApiSecurityTest {
     private BackupExecutionRepository executions;
 
     private static DatabaseTarget shop() {
-        return DatabaseTarget.builder().id(SHOP).name("shop").host("db.internal").port(3306)
+        return DatabaseTarget.builder().id(SHOP).name("shop").engine(DatabaseEngine.MYSQL).host("db.internal").port(3306)
                 .databaseName("shop").username("backup").passwordCiphertext("ciphertext")
                 .createdAt(CREATED).build();
     }
@@ -77,6 +78,7 @@ class ApiSecurityTest {
                 .andExpect(header().doesNotExist("Set-Cookie"))
                 .andExpect(jsonPath("$[0].name").value("shop"))
                 .andExpect(jsonPath("$[0].database").value("shop"))
+                .andExpect(jsonPath("$[0].engine").value("MYSQL"))
                 .andExpect(jsonPath("$[0].passwordCiphertext").doesNotExist());
     }
 

@@ -15,14 +15,15 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import dev.dbvault.application.EngineAdapterRegistry;
 import dev.dbvault.core.exception.BackupFailedException;
 import dev.dbvault.core.model.BackupExecution;
+import dev.dbvault.core.model.DatabaseConnection;
 import dev.dbvault.core.model.DatabaseTarget;
-import dev.dbvault.core.model.MysqlConnection;
 import dev.dbvault.core.port.BackupExecutionRepository;
 import dev.dbvault.core.port.DatabaseTargetRepository;
 import dev.dbvault.core.port.EncryptionPort;
-import dev.dbvault.core.port.MysqlLogicalBackupPort;
+import dev.dbvault.core.port.LogicalBackupPort;
 import dev.dbvault.core.port.StoragePort;
 
 import lombok.RequiredArgsConstructor;
@@ -46,7 +47,7 @@ public class RunBackupService {
 
     private final DatabaseTargetRepository targets;
     private final BackupExecutionRepository executions;
-    private final MysqlLogicalBackupPort backupEngine;
+    private final EngineAdapterRegistry adapters;
     private final StoragePort storage;
     private final EncryptionPort encryption;
     private final Executor jobExecutor;
@@ -83,13 +84,15 @@ public class RunBackupService {
     /** Runs one accepted backup. Called on a background thread; never throws. */
     void run(UUID executionId, DatabaseTarget target) {
         BackupExecution execution = executions.findById(executionId).orElseThrow();
-        Path destination = storage.locationFor(artifactFileName(target, execution.getStartedAt()));
+        LogicalBackupPort backupEngine = adapters.backupFor(target.getEngine());
+        Path destination = storage.locationFor(
+                artifactFileName(target, execution.getStartedAt(), backupEngine.artifactSuffix()));
 
         try {
             // Decrypted here, at the last moment and on the thread that uses
             // it, rather than being carried through the queue.
-            MysqlConnection connection =
-                    MysqlConnection.to(target, encryption.decrypt(target.getPasswordCiphertext()));
+            DatabaseConnection connection =
+                    DatabaseConnection.to(target, encryption.decrypt(target.getPasswordCiphertext()));
 
             long sizeBytes = backupEngine.dumpTo(connection, destination);
             // Read back from disk once the engine has closed the file, so the
@@ -132,11 +135,15 @@ public class RunBackupService {
     }
 
     /**
-     * {@code shop_20260909_075300.sql.gz}. The schema name is sanitised because
+     * {@code shop_20260909_075300.sql.gz}. The database name is sanitised because
      * it comes from user input and is about to become a file name.
      */
-    static String artifactFileName(DatabaseTarget target, Instant startedAt) {
+    static String artifactFileName(DatabaseTarget target, Instant startedAt, String suffix) {
+        if (suffix == null || !suffix.matches("\\.[a-zA-Z0-9.]+")) {
+            throw new IllegalArgumentException(
+                    "Artifact suffix must begin with a dot and contain only letters, digits or dots");
+        }
         String schema = target.getDatabaseName().replaceAll("[^a-zA-Z0-9._-]", "_");
-        return "%s_%s.sql.gz".formatted(schema, TIMESTAMP.format(startedAt));
+        return "%s_%s%s".formatted(schema, TIMESTAMP.format(startedAt), suffix);
     }
 }
