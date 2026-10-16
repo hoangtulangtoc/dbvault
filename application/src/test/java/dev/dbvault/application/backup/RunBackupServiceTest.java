@@ -32,13 +32,16 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import dev.dbvault.application.EngineAdapterRegistry;
+import dev.dbvault.application.notification.NotificationDispatcher;
 import dev.dbvault.application.retention.ApplyBackupRetentionService;
+import dev.dbvault.application.storage.ArtifactStorageService;
 import dev.dbvault.core.exception.BackupFailedException;
 import dev.dbvault.core.model.BackupExecution;
 import dev.dbvault.core.model.DatabaseEngine;
 import dev.dbvault.core.model.ExecutionStatus;
 import dev.dbvault.core.model.DatabaseTarget;
 import dev.dbvault.core.model.DatabaseConnection;
+import dev.dbvault.core.model.NotificationEventType;
 import dev.dbvault.core.port.BackupExecutionRepository;
 import dev.dbvault.core.port.DatabaseTargetRepository;
 import dev.dbvault.core.port.EncryptionPort;
@@ -60,6 +63,7 @@ class RunBackupServiceTest {
     @Mock private StoragePort storage;
     @Mock private EncryptionPort encryption;
     @Mock private ApplyBackupRetentionService retention;
+    @Mock private NotificationDispatcher notifications;
 
     @Captor private ArgumentCaptor<BackupExecution> saved;
 
@@ -77,8 +81,8 @@ class RunBackupServiceTest {
     }
 
     private RunBackupService newService(Executor executor) {
-        return new RunBackupService(targets, executions, adapters, storage, encryption,
-                executor, Clock.fixed(NOW, ZoneOffset.UTC), retention);
+        return new RunBackupService(targets, executions, adapters, ArtifactStorageService.localOnly(storage),
+                encryption, executor, Clock.fixed(NOW, ZoneOffset.UTC), retention, notifications);
     }
 
     // --- accepting a backup -------------------------------------------------
@@ -169,6 +173,7 @@ class RunBackupServiceTest {
         BackupExecution recorded = saved.getAllValues().get(1);
         assertThat(recorded.getStatus()).isEqualTo(ExecutionStatus.FAILED);
         assertThat(recorded.getErrorMessage()).contains("Too many jobs");
+        verify(notifications).publishBackup(any(), eq(recorded), eq(NotificationEventType.BACKUP_FAILED));
     }
 
     // --- running it ---------------------------------------------------------
@@ -191,6 +196,8 @@ class RunBackupServiceTest {
         assertThat(recorded.getSha256()).isEqualTo(SHA256);
         assertThat(recorded.getFinishedAt()).isEqualTo(NOW);
         verify(retention).applyAfterSuccessfulBackup(TARGET_ID);
+        verify(notifications).publishBackup(any(), any(), eq(NotificationEventType.BACKUP_STARTED));
+        verify(notifications).publishBackup(any(), eq(recorded), eq(NotificationEventType.BACKUP_SUCCESS));
     }
 
     /**
@@ -324,6 +331,7 @@ class RunBackupServiceTest {
 
     @Test
     void marksBackupsLeftRunningByAPreviousProcessAsFailed() {
+        givenTarget();
         BackupExecution stranded = BackupExecution.started(UUID.randomUUID(), TARGET_ID, NOW.minusSeconds(600));
         when(executions.findRunning()).thenReturn(List.of(stranded));
         givenSaveEchoes();
@@ -333,6 +341,7 @@ class RunBackupServiceTest {
         BackupExecution recorded = lastSaved();
         assertThat(recorded.getStatus()).isEqualTo(ExecutionStatus.FAILED);
         assertThat(recorded.getErrorMessage()).contains("the application stopped");
+        verify(notifications).publishBackup(any(), eq(recorded), eq(NotificationEventType.BACKUP_FAILED));
     }
 
     @Test

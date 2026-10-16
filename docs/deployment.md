@@ -65,6 +65,21 @@ outside automatic cleanup. Without a policy the volume still grows until an
 operator deletes backups through the console. See
 [ADR-024](adr/024-retention-keeps-new-unrestored-backups-per-target.md).
 
+**Notifications are target-scoped and best-effort.** Create reusable Slack,
+Email or generic Webhook channels on the Notifications page, send a real
+test, then select channels and events from each target. Slack and webhook
+URLs are encrypted with `ENCRYPTION_SECRET_KEY`. Restore events use the
+destination target's subscriptions. Delivery failures are logged and shown by
+Send test, but never change the result of a backup or restore.
+
+Email needs deployment-wide SMTP configuration. Set `DBVAULT_SMTP_HOST`, and
+as needed `DBVAULT_SMTP_PORT`, `DBVAULT_SMTP_USERNAME`,
+`DBVAULT_SMTP_PASSWORD`, `DBVAULT_SMTP_FROM`, `DBVAULT_SMTP_AUTH` and
+`DBVAULT_SMTP_STARTTLS`. Leaving the host empty is valid and keeps the
+application healthy; only Email delivery remains unavailable. All SMTP socket
+timeouts are five seconds. See
+[ADR-028](adr/028-target-scoped-notification-channels.md).
+
 **Schedules use the application's clock and one explicit zone each.** Cron
 expressions use Quartz syntax, with seconds as the first field. The schedule
 row persists in metadata PostgreSQL and its in-memory Quartz trigger is rebuilt

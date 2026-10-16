@@ -16,6 +16,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import dev.dbvault.application.EngineAdapterRegistry;
+import dev.dbvault.application.notification.NotificationDispatcher;
 import dev.dbvault.application.retention.ApplyBackupRetentionService;
 import dev.dbvault.application.storage.ArtifactStorageService;
 import dev.dbvault.application.storage.ArtifactStorageService.PreparedWrite;
@@ -23,6 +24,7 @@ import dev.dbvault.core.exception.BackupFailedException;
 import dev.dbvault.core.model.BackupExecution;
 import dev.dbvault.core.model.DatabaseConnection;
 import dev.dbvault.core.model.DatabaseTarget;
+import dev.dbvault.core.model.NotificationEventType;
 import dev.dbvault.core.port.BackupExecutionRepository;
 import dev.dbvault.core.port.DatabaseTargetRepository;
 import dev.dbvault.core.port.EncryptionPort;
@@ -54,20 +56,29 @@ public class RunBackupService {
     private final Executor jobExecutor;
     private final Clock clock;
     private final ApplyBackupRetentionService retention;
+    private final NotificationDispatcher notifications;
 
     @Autowired
     public RunBackupService(DatabaseTargetRepository targets, BackupExecutionRepository executions,
             EngineAdapterRegistry adapters, ArtifactStorageService storage, EncryptionPort encryption,
-            Executor jobExecutor, Clock clock, ApplyBackupRetentionService retention) {
+            Executor jobExecutor, Clock clock, ApplyBackupRetentionService retention,
+            NotificationDispatcher notifications) {
         this.targets = targets; this.executions = executions; this.adapters = adapters; this.storage = storage;
         this.encryption = encryption; this.jobExecutor = jobExecutor; this.clock = clock; this.retention = retention;
+        this.notifications = notifications;
+    }
+
+    public RunBackupService(DatabaseTargetRepository targets, BackupExecutionRepository executions,
+            EngineAdapterRegistry adapters, ArtifactStorageService storage, EncryptionPort encryption,
+            Executor jobExecutor, Clock clock, ApplyBackupRetentionService retention) {
+        this(targets, executions, adapters, storage, encryption, jobExecutor, clock, retention, null);
     }
 
     public RunBackupService(DatabaseTargetRepository targets, BackupExecutionRepository executions,
             EngineAdapterRegistry adapters, dev.dbvault.core.port.StoragePort storage,
             EncryptionPort encryption, Executor jobExecutor, Clock clock, ApplyBackupRetentionService retention) {
         this(targets, executions, adapters, ArtifactStorageService.localOnly(storage), encryption,
-                jobExecutor, clock, retention);
+                jobExecutor, clock, retention, null);
     }
 
     /**
@@ -93,7 +104,8 @@ public class RunBackupService {
         } catch (RejectedExecutionException e) {
             // The queue is full. Saying so beats a row that sits at RUNNING
             // forever because nothing ever picked it up.
-            finish(execution, "Too many jobs are already running or queued. Try again shortly.");
+            notify(target, finish(execution, "Too many jobs are already running or queued. Try again shortly."),
+                    NotificationEventType.BACKUP_FAILED);
         }
         return execution.getId();
     }
@@ -101,6 +113,7 @@ public class RunBackupService {
     /** Runs one accepted backup. Called on a background thread; never throws. */
     void run(UUID executionId, DatabaseTarget target) {
         BackupExecution execution = executions.findById(executionId).orElseThrow();
+        notify(target, execution, NotificationEventType.BACKUP_STARTED);
         LogicalBackupPort backupEngine = adapters.backupFor(target.getEngine());
         String filename = artifactFileName(target, execution.getStartedAt(), backupEngine.artifactSuffix());
         ArtifactReference published = null;
@@ -123,7 +136,9 @@ public class RunBackupService {
             long sizeBytes = storage.size(destination.path(), destination.remote(), reportedSize);
             String sha256 = storage.sha256(destination.path(), destination.remote());
             published = storage.publish(destination);
-            executions.save(execution.succeeded(published.locator(), sizeBytes, sha256, clock.instant()));
+            BackupExecution succeeded = executions.save(
+                    execution.succeeded(published.locator(), sizeBytes, sha256, clock.instant()));
+            notify(target, succeeded, NotificationEventType.BACKUP_SUCCESS);
             log.info("Backup {} of target {} succeeded: {} ({} bytes, sha256 {})",
                     executionId, target.getName(), published.locator(), sizeBytes, sha256);
 
@@ -131,14 +146,14 @@ public class RunBackupService {
             if (execution.getStorageProfileId() != null) {
                 cleanupFailedArtifact(execution, published, filename);
             }
-            finish(execution, e.getMessage());
+            notify(target, finish(execution, e.getMessage()), NotificationEventType.BACKUP_FAILED);
             return;
         } catch (RuntimeException e) {
             // Anything unexpected still has to land on the row, or the console
             // shows RUNNING for a job that has already died.
             log.error("Backup {} of target {} failed unexpectedly", executionId, target.getName(), e);
             cleanupFailedArtifact(execution, published, filename);
-            finish(execution, e.toString());
+            notify(target, finish(execution, e.toString()), NotificationEventType.BACKUP_FAILED);
             return;
         }
 
@@ -160,16 +175,27 @@ public class RunBackupService {
      */
     public int failInterruptedBackups() {
         List<BackupExecution> stranded = executions.findRunning();
-        stranded.forEach(execution -> finish(
-                execution, "Interrupted: the application stopped while this backup was running."));
+        stranded.forEach(execution -> {
+            BackupExecution failed = finish(
+                    execution, "Interrupted: the application stopped while this backup was running.");
+            notifyIfTargetExists(failed, NotificationEventType.BACKUP_FAILED);
+        });
         if (!stranded.isEmpty()) {
             log.warn("Marked {} backup(s) left running by a previous process as failed", stranded.size());
         }
         return stranded.size();
     }
 
-    private void finish(BackupExecution execution, String message) {
-        executions.save(execution.failed(message, clock.instant()));
+    private BackupExecution finish(BackupExecution execution, String message) {
+        return executions.save(execution.failed(message, clock.instant()));
+    }
+
+    private void notifyIfTargetExists(BackupExecution execution, NotificationEventType event) {
+        targets.findById(execution.getTargetId()).ifPresent(target -> notify(target, execution, event));
+    }
+
+    private void notify(DatabaseTarget target, BackupExecution execution, NotificationEventType event) {
+        if (notifications != null) notifications.publishBackup(target, execution, event);
     }
 
     private void cleanupFailedArtifact(BackupExecution execution, ArtifactReference published, String filename) {
