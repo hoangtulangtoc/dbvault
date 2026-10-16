@@ -6,6 +6,8 @@
   profiles, the bucket permissions they need, and how uploads and restores use staging.
 - [deployment.md](deployment.md) — the image, the compose file, and what an
   operator has to decide.
+- [upgrading-to-1.0.md](upgrading-to-1.0.md) — from 0.3 to 1.0: the TLS
+  requirement on existing targets, and going back.
 - [api.md](api.md) — the HTTP API under `/api/v1` for scripts and dbvault-cli.
 - [licences.md](licences.md) — the third-party licence report the build puts in
   the application jar.
