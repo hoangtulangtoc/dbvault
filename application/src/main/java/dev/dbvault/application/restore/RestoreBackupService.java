@@ -13,6 +13,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import dev.dbvault.application.EngineAdapterRegistry;
+import dev.dbvault.application.backup.BackupActivityGuard;
 import dev.dbvault.core.exception.RestoreFailedException;
 import dev.dbvault.core.model.BackupExecution;
 import dev.dbvault.core.model.DatabaseConnection;
@@ -49,6 +50,7 @@ public class RestoreBackupService {
     private final EncryptionPort encryption;
     private final Executor jobExecutor;
     private final Clock clock;
+    private final BackupActivityGuard activityGuard;
 
     /**
      * Accepts a restore of {@code backupExecutionId} into {@code targetId}.
@@ -62,6 +64,10 @@ public class RestoreBackupService {
      * @throws RestoreFailedException if the backup never produced an artifact
      */
     public UUID start(UUID backupExecutionId, UUID targetId) {
+        return activityGuard.withBackup(backupExecutionId, () -> startGuarded(backupExecutionId, targetId));
+    }
+
+    private UUID startGuarded(UUID backupExecutionId, UUID targetId) {
         BackupExecution backup = backups.findById(backupExecutionId)
                 .orElseThrow(() -> new NoSuchElementException(
                         "No backup execution with id " + backupExecutionId));

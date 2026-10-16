@@ -16,6 +16,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import dev.dbvault.application.EngineAdapterRegistry;
+import dev.dbvault.application.retention.ApplyBackupRetentionService;
 import dev.dbvault.core.exception.BackupFailedException;
 import dev.dbvault.core.model.BackupExecution;
 import dev.dbvault.core.model.DatabaseConnection;
@@ -52,6 +53,7 @@ public class RunBackupService {
     private final EncryptionPort encryption;
     private final Executor jobExecutor;
     private final Clock clock;
+    private final ApplyBackupRetentionService retention;
 
     /**
      * Accepts a backup and hands it to the background.
@@ -104,12 +106,22 @@ public class RunBackupService {
 
         } catch (BackupFailedException e) {
             finish(execution, e.getMessage());
+            return;
         } catch (RuntimeException e) {
             // Anything unexpected still has to land on the row, or the console
             // shows RUNNING for a job that has already died.
             log.error("Backup {} of target {} failed unexpectedly", executionId, target.getName(), e);
             storage.delete(destination);
             finish(execution, e.toString());
+            return;
+        }
+
+        // Retention begins only after the successful row is durable. It has a
+        // separate failure boundary: cleanup can fail, but the backup did not.
+        try {
+            retention.applyAfterSuccessfulBackup(target.getId());
+        } catch (RuntimeException e) {
+            log.error("Could not apply automatic retention after backup {}", executionId, e);
         }
     }
 
