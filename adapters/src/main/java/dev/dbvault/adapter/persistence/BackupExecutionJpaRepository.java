@@ -10,4 +10,6 @@ import dev.dbvault.core.model.ExecutionStatus;
 interface BackupExecutionJpaRepository extends JpaRepository<BackupExecutionEntity, UUID> {
 
     List<BackupExecutionEntity> findByStatus(ExecutionStatus status);
+
+    boolean existsByTargetId(UUID targetId);
 }

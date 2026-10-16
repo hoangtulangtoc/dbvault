@@ -7,9 +7,12 @@ import java.util.UUID;
 
 import org.springframework.stereotype.Service;
 
+import dev.dbvault.core.exception.TargetInUseException;
 import dev.dbvault.core.model.DatabaseTarget;
+import dev.dbvault.core.port.BackupExecutionRepository;
 import dev.dbvault.core.port.DatabaseTargetRepository;
 import dev.dbvault.core.port.EncryptionPort;
+import dev.dbvault.core.port.RestoreExecutionRepository;
 
 import lombok.RequiredArgsConstructor;
 
@@ -28,6 +31,8 @@ import lombok.RequiredArgsConstructor;
 public class ManageDatabaseTargetService {
 
     private final DatabaseTargetRepository repository;
+    private final BackupExecutionRepository backups;
+    private final RestoreExecutionRepository restores;
     private final EncryptionPort encryption;
     private final Clock clock;
 
@@ -84,7 +89,25 @@ public class ManageDatabaseTargetService {
         return repository.findAll();
     }
 
+    /**
+     * Removes a target, and with it the records of restores that went into it.
+     *
+     * <p>Refused while backups of it exist: those are the valuable thing, and
+     * are removed one by one first (ADR-008). The restore records are checked
+     * for after that, so a refusal takes nothing with it. The restores go in
+     * the use case, not by cascade, for the reason ADR-008 gives — see ADR-014.
+     *
+     * @throws TargetInUseException if backups of this target still exist
+     */
     public void delete(UUID id) {
+        DatabaseTarget target = repository.findById(id).orElse(null);
+        if (target == null) {
+            return; // removing an absent target is not an error
+        }
+        if (backups.existsForTarget(id)) {
+            throw new TargetInUseException(target.getName());
+        }
+        restores.deleteForTarget(id);
         repository.deleteById(id);
     }
 }
