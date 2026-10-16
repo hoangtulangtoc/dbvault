@@ -3,5 +3,5 @@
         class="badge"
         th:classappend="${status.name() == 'SUCCEEDED' ? 'badge-success'
                         : (status.name() == 'FAILED' ? 'badge-danger' : 'badge-warning')}"
-        th:text="${#strings.capitalize(#strings.toLowerCase(status))}">Running</span>
+        th:text="${#messages.msg('status.' + status.name())}">Running</span>
 </div>
