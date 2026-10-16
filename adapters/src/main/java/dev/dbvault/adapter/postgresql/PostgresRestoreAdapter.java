@@ -9,6 +9,7 @@ import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
+import dev.dbvault.adapter.process.ClientBinaries;
 import dev.dbvault.adapter.process.ProcessRunner;
 import dev.dbvault.core.exception.RestoreFailedException;
 import dev.dbvault.core.model.DatabaseConnection;
@@ -30,7 +31,7 @@ class PostgresRestoreAdapter implements LogicalRestorePort {
             @Value("${dbvault.postgresql.connect-timeout}") Duration connectTimeout,
             @Value("${dbvault.restore.timeout}") Duration timeout) {
         this.processRunner = processRunner;
-        this.binary = PostgresBinaries.require(binary, "dbvault.postgresql.restore-path");
+        this.binary = ClientBinaries.require(binary, "dbvault.postgresql.restore-path");
         this.connectTimeout = connectTimeout;
         this.timeout = timeout;
     }

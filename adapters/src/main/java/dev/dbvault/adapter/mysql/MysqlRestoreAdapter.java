@@ -13,6 +13,7 @@ import java.util.zip.GZIPInputStream;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
+import dev.dbvault.adapter.process.ClientBinaries;
 import dev.dbvault.adapter.process.ProcessRunner;
 import dev.dbvault.core.exception.RestoreFailedException;
 import dev.dbvault.core.model.DatabaseConnection;
@@ -44,7 +45,7 @@ class MysqlRestoreAdapter implements LogicalRestorePort {
             @Value("${dbvault.restore.timeout}") Duration timeout) {
 
         this.processRunner = processRunner;
-        this.binary = MysqlBinaries.require(binary, "dbvault.mysql.client-path");
+        this.binary = ClientBinaries.require(binary, "dbvault.mysql.client-path");
         this.connectTimeout = connectTimeout;
         this.timeout = timeout;
     }

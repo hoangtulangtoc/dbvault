@@ -10,6 +10,7 @@ import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
+import dev.dbvault.adapter.process.ClientBinaries;
 import dev.dbvault.adapter.process.ProcessRunner;
 import dev.dbvault.core.exception.BackupFailedException;
 import dev.dbvault.core.model.DatabaseConnection;
@@ -31,7 +32,7 @@ class PostgresDumpBackupAdapter implements LogicalBackupPort {
             @Value("${dbvault.postgresql.connect-timeout}") Duration connectTimeout,
             @Value("${dbvault.backup.timeout}") Duration timeout) {
         this.processRunner = processRunner;
-        this.binary = PostgresBinaries.require(binary, "dbvault.postgresql.dump-path");
+        this.binary = ClientBinaries.require(binary, "dbvault.postgresql.dump-path");
         this.connectTimeout = connectTimeout;
         this.timeout = timeout;
     }
