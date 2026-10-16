@@ -1,7 +1,6 @@
 package dev.dbvault.web.controller;
 
 import java.io.InputStream;
-import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.UUID;
@@ -18,6 +17,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import dev.dbvault.application.backup.BackupArtifactService;
@@ -25,6 +25,7 @@ import dev.dbvault.application.target.ManageDatabaseTargetService;
 import dev.dbvault.core.model.BackupExecution;
 import dev.dbvault.core.model.DatabaseTarget;
 import dev.dbvault.core.port.BackupExecutionRepository;
+import dev.dbvault.core.port.HistoryPage;
 
 import lombok.RequiredArgsConstructor;
 
@@ -42,9 +43,11 @@ public class BackupExecutionController {
     private final BackupArtifactService artifacts;
 
     @GetMapping
-    String list(Model model) {
-        List<BackupExecution> all = executions.findAllNewestFirst();
-        model.addAttribute("executions", all);
+    String list(@RequestParam(name = "page", defaultValue = "1") int page, Model model) {
+        HistoryPage<BackupExecution> history =
+                executions.findNewestFirst(HistoryPaging.page(page), HistoryPaging.PAGE_SIZE);
+        model.addAttribute("history", history);
+        model.addAttribute("executions", history.items());
         model.addAttribute("targetNames", targetNames());
         return "execution/list";
     }

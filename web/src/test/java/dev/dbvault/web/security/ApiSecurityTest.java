@@ -22,6 +22,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import dev.dbvault.application.target.ManageDatabaseTargetService;
 import dev.dbvault.core.model.BackupExecution;
 import dev.dbvault.core.model.DatabaseTarget;
+import dev.dbvault.core.port.HistoryPage;
 import dev.dbvault.core.port.BackupExecutionRepository;
 import dev.dbvault.web.api.TargetApiController;
 
@@ -89,7 +90,7 @@ class ApiSecurityTest {
         BackupExecution older = BackupExecution.started(UUID.randomUUID(), SHOP, CREATED.plusSeconds(60))
                 .failed("Access denied", CREATED.plusSeconds(61));
         when(targets.listAll()).thenReturn(List.of(shop()));
-        when(executions.findAllNewestFirst()).thenReturn(List.of(newer, foreign, older));
+        when(executions.findNewestFirst(1, 100)).thenReturn(new HistoryPage<>(List.of(newer, foreign, older), 1, false));
 
         mockMvc.perform(get("/api/targets/{id}/backups", SHOP).with(httpBasic("operator", PASSWORD)))
                 .andExpect(status().isOk())
