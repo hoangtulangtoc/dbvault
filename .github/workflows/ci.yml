@@ -45,6 +45,9 @@ jobs:
           test -x /usr/bin/pg_restore
 
       - name: Verify
+        env:
+          S3_TEST_ACCESS_KEY: ${{ secrets.S3_TEST_ACCESS_KEY }}
+          S3_TEST_SECRET_KEY: ${{ secrets.S3_TEST_SECRET_KEY }}
         run: mvn --batch-mode --no-transfer-progress verify
 
   workflow-lint:
