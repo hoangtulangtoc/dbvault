@@ -49,6 +49,14 @@ services:
       OPERATOR_USERNAME: ${OPERATOR_USERNAME:-admin}
       OPERATOR_PASSWORD_HASH: ${OPERATOR_PASSWORD_HASH}
       STORAGE_STAGING_DIR: /var/lib/dbvault/backups/.staging
+      # Optional deployment-wide transport for Email notification channels.
+      DBVAULT_SMTP_HOST: ${DBVAULT_SMTP_HOST:-}
+      DBVAULT_SMTP_PORT: ${DBVAULT_SMTP_PORT:-587}
+      DBVAULT_SMTP_USERNAME: ${DBVAULT_SMTP_USERNAME:-}
+      DBVAULT_SMTP_PASSWORD: ${DBVAULT_SMTP_PASSWORD:-}
+      DBVAULT_SMTP_FROM: ${DBVAULT_SMTP_FROM:-dbvault@localhost}
+      DBVAULT_SMTP_AUTH: ${DBVAULT_SMTP_AUTH:-true}
+      DBVAULT_SMTP_STARTTLS: ${DBVAULT_SMTP_STARTTLS:-true}
     ports:
       - "8080:8080"
     volumes:

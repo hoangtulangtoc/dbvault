@@ -40,6 +40,7 @@ import dev.dbvault.core.model.DatabaseTarget;
 import dev.dbvault.core.port.ConnectionTestPort;
 import dev.dbvault.core.port.LogicalBackupPort;
 import dev.dbvault.core.port.LogicalRestorePort;
+import dev.dbvault.core.port.NotificationPort;
 import dev.dbvault.core.port.StoragePort;
 
 /**
@@ -98,6 +99,7 @@ class DbvaultApplicationIT {
         assertThat(context.getBeanNamesForType(LogicalRestorePort.class)).hasSize(3);
         assertThat(context.getBeanNamesForType(ConnectionTestPort.class)).hasSize(3);
         assertThat(context.getBeanNamesForType(StoragePort.class)).hasSize(1);
+        assertThat(context.getBeanNamesForType(NotificationPort.class)).hasSize(3);
         assertThat(context.getBean(RunBackupService.class)).isNotNull();
         assertThat(context.getBean(Executor.class)).isNotNull();
     }
