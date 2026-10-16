@@ -2,6 +2,8 @@
 
 - [architecture/overview.md](architecture/overview.md) — the four modules and
   why the dependency direction is what it is.
+- [storage.md](storage.md) — keeping backups in S3-compatible object storage:
+  profiles, the bucket permissions they need, and how uploads and restores use staging.
 - [deployment.md](deployment.md) — the image, the compose file, and what an
   operator has to decide.
 - [branching.md](branching.md) — GitFlow: which branch comes from where, and
