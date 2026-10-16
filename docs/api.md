@@ -21,5 +21,4 @@ curl -u admin https://dbvault.example.com/api/v1/targets
 curl -u admin -X POST https://dbvault.example.com/api/v1/backups/<backup-id>/verifications
 ```
 
-The unversioned `/api/targets` paths answer `308 Permanent Redirect` to
-`/api/v1` and are marked deprecated.
+The unversioned `/api/targets` paths of dbvault 0.2 are gone: they answer `404`.
