@@ -7,6 +7,7 @@ import org.springframework.stereotype.Component;
 
 import dev.dbvault.application.backup.RunBackupService;
 import dev.dbvault.application.restore.RestoreBackupService;
+import dev.dbvault.application.verification.RestoreVerificationService;
 
 import lombok.RequiredArgsConstructor;
 
@@ -24,11 +25,13 @@ class InterruptedJobRepair {
 
     private final RunBackupService runBackupService;
     private final RestoreBackupService restoreBackupService;
+    private final RestoreVerificationService restoreVerificationService;
 
     @EventListener(ApplicationReadyEvent.class)
     @Order(0)
     void repairInterruptedJobs() {
         runBackupService.failInterruptedBackups();
         restoreBackupService.failInterruptedRestores();
+        restoreVerificationService.failInterruptedVerifications();
     }
 }

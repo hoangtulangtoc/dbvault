@@ -47,9 +47,13 @@ public class DatabaseTargetForm {
     @Size(max = 63, message = "Username must be at most 63 characters")
     private String username;
 
+    @Size(max = 64, message = "Authentication database must be at most 64 characters")
+    private String authenticationDatabase;
+
     @NotBlank(message = "Password is required")
     private String password;
     private UUID storageProfileId;
+    private boolean verifyAfterBackup;
 
     public static DatabaseTargetForm blank() {
         DatabaseTargetForm form = new DatabaseTargetForm();
@@ -59,6 +63,8 @@ public class DatabaseTargetForm {
     }
 
     public RegisterTargetCommand toCommand() {
-        return new RegisterTargetCommand(name, engine, host, port, database, username, password, storageProfileId);
+        return new RegisterTargetCommand(
+                name, engine, host, port, database, username, password, authenticationDatabase,
+                storageProfileId, verifyAfterBackup);
     }
 }

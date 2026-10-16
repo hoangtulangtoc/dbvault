@@ -3,16 +3,19 @@
 One image, one compose file. See
 [ADR-009](adr/009-one-image-that-carries-the-mysql-client.md) for the original
 packaging decision and [ADR-017](adr/017-route-logical-backups-by-database-engine.md)
-for the PostgreSQL client added to it.
+for the PostgreSQL client added to it. MongoDB packaging is recorded in
+[ADR-018](adr/018-mongodb-archives-and-explicit-authentication-database.md).
 
 ## What the image contains
 
-A JRE, the application jar, Ubuntu's `mysql-client` and
-`postgresql-client`. The MySQL package is Oracle's MySQL, not MariaDB. That
+A JRE, the application jar, Ubuntu's `mysql-client` and `postgresql-client`,
+and MongoDB's `mongodb-database-tools`. The MySQL package is Oracle's MySQL,
+not MariaDB. That
 distinction is load-bearing: MariaDB's `mysqldump` rejects
 `--set-gtid-purged`, which this tool always passes, so every MySQL backup would
-fail. The PostgreSQL package supplies `psql`, `pg_dump` and `pg_restore`.
-Anyone changing the base image must check all five binaries again.
+fail. The PostgreSQL package supplies `psql`, `pg_dump` and `pg_restore`; the
+MongoDB package supplies `mongodump` and `mongorestore`. Anyone changing the
+base image must check all seven binaries again.
 
 It runs as an unprivileged user, `dbvault` (uid 10001), and its healthcheck
 asks `/actuator/health`, so it only reports healthy once the application is up
@@ -62,6 +65,38 @@ outside automatic cleanup. Without a policy the volume still grows until an
 operator deletes backups through the console. See
 [ADR-024](adr/024-retention-keeps-new-unrestored-backups-per-target.md).
 
+**Notifications are target-scoped and best-effort.** Create reusable Slack,
+Email or generic Webhook channels on the Notifications page, send a real
+test, then select channels and events from each target. Slack and webhook
+URLs are encrypted with `ENCRYPTION_SECRET_KEY`. Restore events use the
+destination target's subscriptions. Delivery failures are logged and shown by
+Send test, but never change the result of a backup or restore.
+
+Email needs deployment-wide SMTP configuration. Set `DBVAULT_SMTP_HOST`, and
+as needed `DBVAULT_SMTP_PORT`, `DBVAULT_SMTP_USERNAME`,
+`DBVAULT_SMTP_PASSWORD`, `DBVAULT_SMTP_FROM`, `DBVAULT_SMTP_AUTH` and
+`DBVAULT_SMTP_STARTTLS`. Leaving the host empty is valid and keeps the
+application healthy; only Email delivery remains unavailable. All SMTP socket
+timeouts are five seconds. See
+[ADR-028](adr/028-target-scoped-notification-channels.md).
+
+**Restore verification is deliberately opt-in.** Set
+`DBVAULT_VERIFICATION_ENABLED=true` to expose **Test restore** and the
+per-target automatic checkbox. MySQL, PostgreSQL and MongoDB verification
+needs the host Docker socket: uncomment
+the socket volume and `group_add` in `docker-compose.yml`, then set
+`DOCKER_SOCKET_GID` to `stat -c '%g' /var/run/docker.sock` on the host. The
+application image already carries the Docker CLI.
+
+Mounting `/var/run/docker.sock` grants root-equivalent control over the Docker
+host. Keep verification disabled when that trust boundary is unacceptable;
+startup and every other feature remain available. Verification containers
+publish no ports, receive no source-database credentials, use deterministic
+names and are force-removed before an attempt may succeed. Operators can
+override the three images and the pull, startup and cleanup timeouts with the
+`DBVAULT_VERIFICATION_*` variables listed in `docker-compose.yml`. See
+[ADR-029](adr/029-isolated-restore-verification.md).
+
 **Schedules use the application's clock and one explicit zone each.** Cron
 expressions use Quartz syntax, with seconds as the first field. The schedule
 row persists in metadata PostgreSQL and its in-memory Quartz trigger is rebuilt
@@ -70,7 +105,7 @@ replayed; after restart the next future fire is shown in the console. This
 deployment is intentionally single-instance for scheduling — running several
 application replicas would create the same trigger in each replica.
 
-**Reaching the databases to be backed up.** A MySQL or PostgreSQL server on the
+**Reaching the databases to be backed up.** A MySQL, PostgreSQL or MongoDB server on the
 Docker host is `host.docker.internal` from inside the container; compose maps
 that name explicitly because on Linux it does not otherwise exist. A server
 elsewhere just needs to be routable from the container.
@@ -81,9 +116,14 @@ target automatically. Backing it up requires registering a PostgreSQL target
 explicitly, with credentials that have the required access.
 
 **Client paths.** The image sets `MYSQL_CLIENT_PATH`, `MYSQLDUMP_PATH`,
-`PSQL_PATH`, `PG_DUMP_PATH` and `PG_RESTORE_PATH` to `/usr/bin/...`. A source or
-custom-image deployment may override them, but every configured file must be
-executable or startup fails.
+`PSQL_PATH`, `PG_DUMP_PATH`, `PG_RESTORE_PATH`, `MONGODUMP_PATH` and
+`MONGORESTORE_PATH` to `/usr/bin/...`. A source or custom-image deployment may
+override them, but every configured file must be executable or startup fails.
+
+MongoDB credentials may belong to a database other than the one being backed
+up. The registration form therefore asks for an authentication database and
+defaults it to `admin`. Passwords are handed to each tool through a temporary
+owner-only config file, never through its visible command line.
 
 PostgreSQL's dump tools have major-version compatibility rules: a client that
 can read a source is not necessarily able to produce an archive loadable by an

@@ -1,0 +1,56 @@
+name: Announce a release
+
+# Run by hand once a release is published in ReleaseFlow: ReleaseFlow then delivers it to the
+# channels of its "CI announce" rule. The call is signed with the rule's own secret.
+on:
+  workflow_dispatch:
+    inputs:
+      release_id:
+        description: ReleaseFlow release ID (published)
+        required: true
+
+permissions: {}
+
+jobs:
+  announce:
+    name: announce
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      RELEASEFLOW_URL: ${{ vars.RELEASEFLOW_URL }}
+      ANNOUNCE_PATH: ${{ secrets.RELEASEFLOW_ANNOUNCE_PATH }}
+      ANNOUNCE_SECRET: ${{ secrets.RELEASEFLOW_ANNOUNCE_SECRET }}
+      RELEASE_ID: ${{ inputs.release_id }}
+    steps:
+      - name: Call ReleaseFlow and wait for the run
+        run: |
+          set -euo pipefail
+          sign() { # method path body
+            local ts delivery digest
+            ts=$(date +%s)
+            delivery=${DELIVERY:-$(cat /proc/sys/kernel/random/uuid)}
+            digest=$(printf '%s' "$3" | openssl dgst -sha256 -hex | cut -d' ' -f2)
+            signature=$(printf '%s\n%s\n%s\n%s\n%s' "$ts" "$delivery" "$1" "$2" "$digest" \
+              | openssl dgst -sha256 -hmac "$ANNOUNCE_SECRET" -hex | cut -d' ' -f2)
+            headers=(-H "X-ReleaseFlow-Timestamp: $ts" -H "X-ReleaseFlow-Delivery: $delivery"
+                     -H "X-ReleaseFlow-Signature-256: sha256=$signature")
+          }
+          body=$(jq -cn --arg id "$RELEASE_ID" '{releaseId: $id}')
+          DELIVERY=$(cat /proc/sys/kernel/random/uuid)
+          sign POST "$ANNOUNCE_PATH" "$body"
+          answer=$(curl -sS --fail-with-body -X POST "$RELEASEFLOW_URL$ANNOUNCE_PATH" "${headers[@]}" \
+            -H 'Content-Type: application/json' -d "$body")
+          echo "Accepted: $(jq -c '{runId, status}' <<<"$answer")"
+          status_path=$(jq -r .statusPath <<<"$answer")
+          for _ in $(seq 1 60); do
+            DELIVERY=
+            sign GET "$status_path" ""
+            run=$(curl -sS --fail-with-body "$RELEASEFLOW_URL$status_path" "${headers[@]}")
+            status=$(jq -r .status <<<"$run")
+            case $status in
+              SUCCEEDED) echo "Run succeeded"; exit 0 ;;
+              FAILED|UNKNOWN|CANCELLED) echo "Run ended $status: $(jq -c . <<<"$run")"; exit 1 ;;
+            esac
+            sleep 5
+          done
+          echo "Run still $status after five minutes"; exit 1

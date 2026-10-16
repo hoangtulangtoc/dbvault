@@ -28,6 +28,7 @@ import dev.dbvault.core.model.BackupExecution;
 import dev.dbvault.core.model.RestoreExecution;
 import dev.dbvault.core.port.BackupExecutionRepository;
 import dev.dbvault.core.port.RestoreExecutionRepository;
+import dev.dbvault.core.port.RestoreVerificationExecutionRepository;
 import dev.dbvault.core.port.StoragePort;
 
 @ExtendWith(MockitoExtension.class)
@@ -43,13 +44,15 @@ class BackupArtifactServiceTest {
 
     @Mock private BackupExecutionRepository backups;
     @Mock private RestoreExecutionRepository restores;
+    @Mock private RestoreVerificationExecutionRepository verifications;
     @Mock private StoragePort storage;
 
     private BackupArtifactService service;
 
     @BeforeEach
     void setUp() {
-        service = new BackupArtifactService(backups, restores, storage);
+        service = new BackupArtifactService(backups, restores, verifications,
+                dev.dbvault.application.storage.ArtifactStorageService.localOnly(storage));
     }
 
     // --- download -----------------------------------------------------------
@@ -197,6 +200,19 @@ class BackupArtifactServiceTest {
         verify(backups, never()).deleteById(any());
     }
 
+    @Test
+    void refusesToDeleteAnArtifactWhileRestoreVerificationIsRunning() {
+        givenSucceeded();
+        when(verifications.existsRunningForBackup(BACKUP_ID)).thenReturn(true);
+
+        assertThatThrownBy(() -> service.delete(BACKUP_ID))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("restore-verified");
+
+        verify(storage, never()).delete(any());
+        verify(backups, never()).deleteById(any());
+    }
+
     // --- several at once ----------------------------------------------------
 
     @Test
@@ -325,6 +341,18 @@ class BackupArtifactServiceTest {
     void retentionNeverDeletesABackupWithRestoreHistory() {
         givenSucceeded();
         when(restores.countForBackup(BACKUP_ID)).thenReturn(1L);
+
+        assertThat(service.deleteForRetention(BACKUP_ID))
+                .isEqualTo(BackupArtifactService.RetentionDeletion.PROTECTED);
+
+        verify(storage, never()).delete(any());
+        verify(backups, never()).deleteById(any());
+    }
+
+    @Test
+    void retentionNeverDeletesAnArtifactBeingRestoreVerified() {
+        givenSucceeded();
+        when(verifications.existsRunningForBackup(BACKUP_ID)).thenReturn(true);
 
         assertThat(service.deleteForRetention(BACKUP_ID))
                 .isEqualTo(BackupArtifactService.RetentionDeletion.PROTECTED);

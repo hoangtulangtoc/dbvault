@@ -1,5 +1,6 @@
 package dev.dbvault.web.controller;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
@@ -175,7 +176,9 @@ class DatabaseTargetControllerTest {
                 .andExpect(content().string(org.hamcrest.Matchers.matchesPattern(
                         "(?s).*value=\"MYSQL\".*?data-default-port=\"3306\".*")))
                 .andExpect(content().string(org.hamcrest.Matchers.matchesPattern(
-                        "(?s).*value=\"POSTGRESQL\".*?data-default-port=\"5432\".*")));
+                        "(?s).*value=\"POSTGRESQL\".*?data-default-port=\"5432\".*")))
+                .andExpect(content().string(org.hamcrest.Matchers.matchesPattern(
+                        "(?s).*value=\"MONGODB\".*?data-default-port=\"27017\".*")));
     }
 
     @Test
@@ -197,6 +200,26 @@ class DatabaseTargetControllerTest {
     }
 
     @Test
+    void registersAutomaticRestoreVerificationForASupportedEngine() throws Exception {
+        when(service.register(any())).thenReturn(target("production"));
+
+        mockMvc.perform(post("/databases").with(csrf())
+                        .param("engine", "MYSQL")
+                        .param("name", "production")
+                        .param("host", "127.0.0.1")
+                        .param("port", "3306")
+                        .param("database", "shop")
+                        .param("username", "backup")
+                        .param("password", "s3cr3t")
+                        .param("verifyAfterBackup", "true"))
+                .andExpect(status().is3xxRedirection());
+
+        ArgumentCaptor<RegisterTargetCommand> command = ArgumentCaptor.forClass(RegisterTargetCommand.class);
+        verify(service).register(command.capture());
+        assertThat(command.getValue().verifyAfterBackup()).isTrue();
+    }
+
+    @Test
     void registersAPostgresqlTargetWithTheSelectedEngine() throws Exception {
         when(service.register(any())).thenReturn(target("analytics"));
 
@@ -215,6 +238,29 @@ class DatabaseTargetControllerTest {
         org.assertj.core.api.Assertions.assertThat(command.getValue().engine())
                 .isEqualTo(DatabaseEngine.POSTGRESQL);
         org.assertj.core.api.Assertions.assertThat(command.getValue().port()).isEqualTo(5432);
+    }
+
+    @Test
+    void registersAMongodbTargetWithItsAuthenticationDatabase() throws Exception {
+        when(service.register(any())).thenReturn(target("documents"));
+
+        mockMvc.perform(post("/databases").with(csrf())
+                        .param("engine", "MONGODB")
+                        .param("name", "documents")
+                        .param("host", "mongo.internal")
+                        .param("port", "27017")
+                        .param("database", "shop")
+                        .param("username", "backup")
+                        .param("password", "s3cr3t")
+                        .param("authenticationDatabase", "admin"))
+                .andExpect(status().is3xxRedirection());
+
+        ArgumentCaptor<RegisterTargetCommand> command = ArgumentCaptor.forClass(RegisterTargetCommand.class);
+        verify(service).register(command.capture());
+        org.assertj.core.api.Assertions.assertThat(command.getValue().engine())
+                .isEqualTo(DatabaseEngine.MONGODB);
+        org.assertj.core.api.Assertions.assertThat(command.getValue().authenticationDatabase())
+                .isEqualTo("admin");
     }
 
     @Test
@@ -291,6 +337,18 @@ class DatabaseTargetControllerTest {
                 .andExpect(content().string(org.hamcrest.Matchers.not(
                         org.hamcrest.Matchers.containsString("Y2lwaGVydGV4dA=="))))
                 .andExpect(content().string(org.hamcrest.Matchers.containsString("Save changes")));
+    }
+
+    @Test
+    void mongodbEditFormShowsItsEditableAuthenticationDatabase() throws Exception {
+        DatabaseTarget target = mongoTarget("documents");
+        when(service.get(target.getId())).thenReturn(target);
+
+        mockMvc.perform(get("/databases/{id}/edit", target.getId()))
+                .andExpect(status().isOk())
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("readonly value=\"MongoDB\"")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString(
+                        "name=\"authenticationDatabase\" value=\"admin\"")));
     }
 
     @Test
@@ -637,6 +695,20 @@ class DatabaseTargetControllerTest {
                 .passwordCiphertext("Y2lwaGVydGV4dA==")
                 .createdAt(Instant.parse("2026-09-09T10:15:30Z"))
                 .lastConnectionCheck(check)
+                .build();
+    }
+
+    private static DatabaseTarget mongoTarget(String name) {
+        return DatabaseTarget.builder().engine(DatabaseEngine.MONGODB)
+                .id(UUID.randomUUID())
+                .name(name)
+                .host("mongo.internal")
+                .port(27017)
+                .databaseName("shop")
+                .username("backup")
+                .authenticationDatabase("admin")
+                .passwordCiphertext("Y2lwaGVydGV4dA==")
+                .createdAt(Instant.parse("2026-09-09T10:15:30Z"))
                 .build();
     }
 }

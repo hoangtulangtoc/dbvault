@@ -36,6 +36,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import dev.dbvault.application.backup.BackupArtifactService;
 import dev.dbvault.application.target.ManageDatabaseTargetService;
 import dev.dbvault.application.storage.ManageStorageProfileService;
+import dev.dbvault.application.verification.RestoreVerificationService;
 import dev.dbvault.core.model.BackupExecution;
 import dev.dbvault.core.model.DatabaseTarget;
 import dev.dbvault.core.port.BackupExecutionRepository;
@@ -70,6 +71,9 @@ class BackupExecutionControllerTest {
 
     @MockitoBean
     private ManageStorageProfileService storageProfiles;
+
+    @MockitoBean
+    private RestoreVerificationService restoreVerification;
 
     @Test
     void showsAnEmptyStateWhenNothingHasBeenBackedUp() throws Exception {
@@ -559,6 +563,20 @@ class BackupExecutionControllerTest {
         mockMvc.perform(post("/executions/{id}/verify", id).with(csrf()))
                 .andExpect(redirectedUrl("/executions/" + id))
                 .andExpect(flash().attribute("message", containsString("matches the checksum")));
+    }
+
+    @Test
+    void testRestoreRequiresCsrfAndStartsASeparateVerification() throws Exception {
+        UUID verificationId = UUID.randomUUID();
+        when(restoreVerification.start(any())).thenReturn(verificationId);
+
+        mockMvc.perform(post("/executions/" + succeeded().getId() + "/test-restore")
+                        .with(csrf().useInvalidToken()))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(post("/executions/" + succeeded().getId() + "/test-restore").with(csrf()))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(flash().attribute("message", "Restore verification started"));
     }
 
     @Test

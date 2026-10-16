@@ -49,12 +49,36 @@ services:
       OPERATOR_USERNAME: ${OPERATOR_USERNAME:-admin}
       OPERATOR_PASSWORD_HASH: ${OPERATOR_PASSWORD_HASH}
       STORAGE_STAGING_DIR: /var/lib/dbvault/backups/.staging
+      # Optional deployment-wide transport for Email notification channels.
+      DBVAULT_SMTP_HOST: ${DBVAULT_SMTP_HOST:-}
+      DBVAULT_SMTP_PORT: ${DBVAULT_SMTP_PORT:-587}
+      DBVAULT_SMTP_USERNAME: ${DBVAULT_SMTP_USERNAME:-}
+      DBVAULT_SMTP_PASSWORD: ${DBVAULT_SMTP_PASSWORD:-}
+      DBVAULT_SMTP_FROM: ${DBVAULT_SMTP_FROM:-dbvault@localhost}
+      DBVAULT_SMTP_AUTH: ${DBVAULT_SMTP_AUTH:-true}
+      DBVAULT_SMTP_STARTTLS: ${DBVAULT_SMTP_STARTTLS:-true}
+      # Restore verification stays off unless the operator deliberately enables
+      # it and grants Docker-socket access below.
+      DBVAULT_VERIFICATION_ENABLED: ${DBVAULT_VERIFICATION_ENABLED:-false}
+      DBVAULT_VERIFICATION_MYSQL_IMAGE: ${DBVAULT_VERIFICATION_MYSQL_IMAGE:-mysql:8.4}
+      DBVAULT_VERIFICATION_POSTGRESQL_IMAGE: ${DBVAULT_VERIFICATION_POSTGRESQL_IMAGE:-postgres:17-alpine}
+      DBVAULT_VERIFICATION_MONGODB_IMAGE: ${DBVAULT_VERIFICATION_MONGODB_IMAGE:-mongo:8.0}
+      DBVAULT_VERIFICATION_PULL_TIMEOUT: ${DBVAULT_VERIFICATION_PULL_TIMEOUT:-10m}
+      DBVAULT_VERIFICATION_STARTUP_TIMEOUT: ${DBVAULT_VERIFICATION_STARTUP_TIMEOUT:-2m}
+      DBVAULT_VERIFICATION_CLEANUP_TIMEOUT: ${DBVAULT_VERIFICATION_CLEANUP_TIMEOUT:-30s}
     ports:
       - "8080:8080"
     volumes:
       # Named, not bind-mounted: the artifacts outlive the container, and
       # nothing about them belongs in the source tree.
       - backups:/var/lib/dbvault/backups
+      # Opt-in restore verification. docker.sock grants root-equivalent control
+      # of the host. Uncomment this and group_add only after accepting that
+      # boundary; set DOCKER_SOCKET_GID to `stat -c '%g' /var/run/docker.sock`
+      # on the host.
+      # - /var/run/docker.sock:/var/run/docker.sock
+    # group_add:
+    #   - "${DOCKER_SOCKET_GID:-999}"
     # A target database running on the host is reachable as
     # host.docker.internal from inside this container. On Linux that name does
     # not exist without this line; on Docker Desktop it is harmless.

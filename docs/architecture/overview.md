@@ -97,10 +97,11 @@ once:
   `GZIPOutputStream`'s trailer is written on close, and that belongs to whoever
   opened it. If the sink cannot be written to, the child is killed at once
   rather than left blocked on a pipe until the timeout.
-- **Credentials travel in `ProcessBuilder.environment()`** as `MYSQL_PWD` or
-  `PGPASSWORD`. Never on the command line, where `ps` shows them to every user
-  on the host, and never through `System.setProperty`, which is JVM-global and
-  would leak between jobs running at the same time.
+- **Credentials never travel on the command line.** MySQL and PostgreSQL use
+  per-child environment variables (`MYSQL_PWD` and `PGPASSWORD`). MongoDB
+  Database Tools have no equivalent, so each invocation gets a unique YAML
+  config file created as `0600` and deleted as soon as the child exits. Nothing
+  uses `System.setProperty`, which is JVM-global and would leak between jobs.
 
 `MysqlClient` adds the MySQL-specific knowledge: it rewrites the literal host
 `localhost` to `127.0.0.1`, because the client otherwise connects over a Unix
@@ -114,6 +115,12 @@ set `PGCONNECT_TIMEOUT`. `PostgresDumpBackupAdapter` writes a custom-format
 archive directly to its destination; `PostgresRestoreAdapter` lists that
 archive before starting a destructive restore. Each configured binary is
 checked for executability when its adapter is constructed.
+
+The MongoDB adapters pass an explicit authentication database separately from
+the database being backed up. `mongodump` writes a gzip-compressed archive;
+`mongorestore` dry-runs it before applying it and rewrites the source namespace
+when the destination database has another name. See
+[ADR-018](../adr/018-mongodb-archives-and-explicit-authentication-database.md).
 
 The use cases do not know those commands. `DatabaseConnection` carries the
 short-lived plaintext credential and `EngineAdapterRegistry` selects a
@@ -138,7 +145,8 @@ are separate on purpose — see
    `ArtifactStorageService` for a local destination or private staging path.
    It writes a provider-neutral artifact reference onto the same row. MySQL streams
    gzipped SQL to `<database>_<timestamp>.sql.gz`; PostgreSQL writes a custom
-   archive to `<database>_<timestamp>.dump`.
+   archive to `<database>_<timestamp>.dump`; MongoDB writes a compressed archive
+   to `<database>_<timestamp>.archive.gz`.
 
 `ArtifactStorageService` is the only application router between local storage,
 staging and S3. A RUNNING execution snapshots the target's profile id. Local
@@ -187,6 +195,41 @@ failure is stored on the policy and never rewrites the successful backup that
 triggered it. See
 [ADR-024](../adr/024-retention-keeps-new-unrestored-backups-per-target.md).
 
+## Dispatching notifications
+
+`notification_channels` stores reusable typed destinations and encrypted
+transport secrets. `database_target_notification_channels` links each target
+to selected backup and restore lifecycle events. `NotificationDispatcher`
+loads those links only when an event occurs, decrypts the channel credential at
+the last possible moment, selects one of three `NotificationPort` adapters and
+isolates each delivery failure from the next channel and from the execution.
+
+Backup and restore workers publish `STARTED` before touching the engine and a
+single terminal event only after the final row is durable. Queue rejection and
+startup repair use the same failure path. A cross-target restore reads the
+destination target's subscriptions, but the message carries both target
+identities. Slack and Webhook requests have bounded HTTP timeouts;
+Email uses optional deployment-wide SMTP. There is deliberately no outbox,
+retry or delivery-history model. See
+[ADR-028](../adr/028-target-scoped-notification-channels.md).
+
+## Verifying a restore without touching a target
+
+`RestoreVerificationService` owns a history row independent of both backup and
+ordinary restore executions. It accepts only a successful backup, protects the
+artifact with `BackupActivityGuard`, materializes provider-backed artifacts,
+checks SHA-256, and routes by engine through `RestoreVerificationPort`.
+Manual attempts use the shared bounded executor. An automatic attempt runs on
+the successful backup's existing worker after notification and retention, so
+it cannot deadlock by trying to acquire another worker slot.
+
+The three engine adapters create an unexposed container whose name is
+derived from the verification UUID. Restore is followed by an engine-specific object health
+check, and cleanup must complete before success is persisted. A failed check,
+timeout or cleanup changes only the verification row. The active-verification
+query also protects an artifact from manual deletion and retention. See
+[ADR-029](../adr/029-isolated-restore-verification.md).
+
 A restore follows the same two-step shape and shares the same pool, so the bound
 is on total heavy work rather than on each kind separately. What a restore
 actually does — and what it deliberately does not — is in
@@ -216,9 +259,10 @@ can take its backups with it once its name is typed. Every check — a backup
 still running, a restore still reading one — is made for all of them before any
 is touched
 ([ADR-015](../adr/015-deleting-many-backups-and-a-target-with-them.md)). Every
-foreign key that protects backup or restore history is `RESTRICT`: the schema
-never removes that history by itself. Retention-policy metadata is the narrow
-exception and cascades with its target because it has no meaning on its own.
+foreign key that protects ordinary restore history is `RESTRICT`: the schema
+never removes that history by itself. Verification attempts cascade with their
+backup, and retention-policy metadata cascades with its target, because neither
+has meaning after its owner is deliberately removed.
 
 `StoragePort` refuses to read or delete anything outside its configured root.
 Every path it receives was read back from the database, and a value in a
@@ -234,8 +278,8 @@ Flyway output, and H2 would misreport all three.
 
 No test may skip itself because something it needs is absent. A test that turns
 green by not running is worse than no test at all — so the integration tests
-assert that all MySQL and PostgreSQL client binaries are present rather than
-assuming it, and CI installs them explicitly.
+assert that all MySQL, PostgreSQL and MongoDB client binaries are present rather
+than assuming it, and CI installs them explicitly.
 
 ## Database migrations
 
@@ -254,3 +298,17 @@ V7 and proves the ciphertext and history survived.
 `V8` adds durable backup schedules. Their target foreign key is restrictive:
 a schedule must be deliberately deleted before its target can be removed.
 Case-folded, trimmed names are unique just as target names are.
+
+`V9` adds per-target retention policies. `V10` adds S3 storage profiles and
+execution-time profile snapshots.
+
+`V11` adds MongoDB's nullable `authentication_database`, keeps it absent for
+existing SQL targets, and requires it for new MongoDB rows while widening the
+engine constraint to include `MONGODB`.
+
+`V12` adds typed notification channels and per-target event subscriptions.
+`V13` adds the target automatic-verification flag and independent restore
+verification attempt history, including a partial unique index that permits
+only one running attempt for a backup.
+Target deletion cascades only the link rows, while channel deletion is
+restricted until every target has stopped using it.

@@ -3,7 +3,8 @@ package dev.dbvault.core.model;
 /** Database engines with a complete logical backup and restore adapter. */
 public enum DatabaseEngine {
     MYSQL("MySQL", 3306),
-    POSTGRESQL("PostgreSQL", 5432);
+    POSTGRESQL("PostgreSQL", 5432),
+    MONGODB("MongoDB", 27017);
 
     private final String displayName;
     private final int defaultPort;
@@ -19,5 +20,10 @@ public enum DatabaseEngine {
 
     public int defaultPort() {
         return defaultPort;
+    }
+
+    /** Every engine dbvault backs up can be restored into a throwaway server and checked. */
+    public boolean supportsRestoreVerification() {
+        return true;
     }
 }

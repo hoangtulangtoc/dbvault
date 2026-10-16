@@ -18,12 +18,26 @@ public record RegisterTargetCommand(
         String database,
         String username,
         String password,
-        UUID storageProfileId) {
+        String authenticationDatabase,
+        UUID storageProfileId,
+        boolean verifyAfterBackup) {
+
+    /** A target registered without automatic restore verification. */
+    public RegisterTargetCommand(String name, DatabaseEngine engine, String host, int port, String database,
+            String username, String password, String authenticationDatabase, UUID storageProfileId) {
+        this(name, engine, host, port, database, username, password, authenticationDatabase, storageProfileId, false);
+    }
+
+    /** A MongoDB target, or any target, whose backups stay on the built-in local storage. */
+    public RegisterTargetCommand(String name, DatabaseEngine engine, String host, int port, String database,
+            String username, String password, String authenticationDatabase) {
+        this(name, engine, host, port, database, username, password, authenticationDatabase, null, false);
+    }
 
     /** A target whose backups stay on the built-in local storage. */
     public RegisterTargetCommand(String name, DatabaseEngine engine, String host, int port, String database,
             String username, String password) {
-        this(name, engine, host, port, database, username, password, null);
+        this(name, engine, host, port, database, username, password, null, null, false);
     }
 
     public RegisterTargetCommand {

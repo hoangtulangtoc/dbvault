@@ -89,7 +89,9 @@ public class ManageDatabaseTargetService {
                 .port(command.port())
                 .databaseName(command.database())
                 .username(command.username())
+                .authenticationDatabase(command.authenticationDatabase())
                 .storageProfileId(command.storageProfileId())
+                .verifyAfterBackup(command.verifyAfterBackup())
                 .passwordCiphertext(encryption.encryptFor(id, command.password()))
                 .createdAt(clock.instant())
                 .build();
@@ -122,8 +124,10 @@ public class ManageDatabaseTargetService {
                 command.host(),
                 command.port(),
                 command.username(),
+                command.authenticationDatabase(),
                 command.changesPassword() ? encryption.encryptFor(current.getId(), command.password()) : null,
-                command.storageProfileId());
+                command.storageProfileId(),
+                command.verifyAfterBackup());
 
         return repository.save(edited);
     }

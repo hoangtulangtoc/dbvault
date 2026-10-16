@@ -31,6 +31,7 @@ import dev.dbvault.application.backup.BackupArtifactService.BulkDeletionPreview;
 import dev.dbvault.core.exception.InvalidTargetException;
 import dev.dbvault.core.exception.TargetInUseException;
 import dev.dbvault.core.model.BackupExecution;
+import dev.dbvault.core.model.DatabaseEngine;
 import dev.dbvault.core.model.DatabaseTarget;
 import dev.dbvault.core.model.RestoreExecution;
 import dev.dbvault.core.port.BackupExecutionRepository;
@@ -121,6 +122,20 @@ class ManageDatabaseTargetServiceTest {
         assertThat(target.getPort()).isEqualTo(3306);
         assertThat(target.getDatabaseName()).isEqualTo("shop");
         assertThat(target.getUsername()).isEqualTo("backup");
+    }
+
+    @Test
+    void registersAMongodbAuthenticationDatabase() {
+        when(encryption.encryptFor(any(), any())).thenReturn("sealed");
+        when(repository.save(any())).thenAnswer(call -> call.getArgument(0));
+
+        service.register(new RegisterTargetCommand(
+                "documents", DatabaseEngine.MONGODB, "mongo.internal", 27017,
+                "shop", "backup", "s3cr3t", "admin"));
+
+        verify(repository).save(savedTarget.capture());
+        assertThat(savedTarget.getValue().getEngine()).isEqualTo(DatabaseEngine.MONGODB);
+        assertThat(savedTarget.getValue().getAuthenticationDatabase()).isEqualTo("admin");
     }
 
     @Test

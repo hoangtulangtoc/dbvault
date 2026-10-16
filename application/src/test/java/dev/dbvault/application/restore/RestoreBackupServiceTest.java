@@ -34,6 +34,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import dev.dbvault.application.EngineAdapterRegistry;
 import dev.dbvault.application.backup.BackupActivityGuard;
+import dev.dbvault.application.notification.NotificationDispatcher;
+import dev.dbvault.application.storage.ArtifactStorageService;
 import dev.dbvault.core.exception.RestoreFailedException;
 import dev.dbvault.core.model.BackupExecution;
 import dev.dbvault.core.model.DatabaseEngine;
@@ -41,6 +43,7 @@ import dev.dbvault.core.model.DatabaseTarget;
 import dev.dbvault.core.model.ExecutionStatus;
 import dev.dbvault.core.model.DatabaseConnection;
 import dev.dbvault.core.model.RestoreExecution;
+import dev.dbvault.core.model.NotificationEventType;
 import dev.dbvault.core.port.BackupExecutionRepository;
 import dev.dbvault.core.port.DatabaseTargetRepository;
 import dev.dbvault.core.port.EncryptionPort;
@@ -64,6 +67,7 @@ class RestoreBackupServiceTest {
     @Mock private LogicalRestorePort restoreEngine;
     @Mock private StoragePort storage;
     @Mock private EncryptionPort encryption;
+    @Mock private NotificationDispatcher notifications;
 
     @Captor private ArgumentCaptor<RestoreExecution> saved;
 
@@ -78,8 +82,9 @@ class RestoreBackupServiceTest {
     }
 
     private RestoreBackupService newService(Executor executor) {
-        return new RestoreBackupService(backups, restores, targets, adapters, storage, encryption,
-                executor, Clock.fixed(NOW, ZoneOffset.UTC), new BackupActivityGuard());
+        return new RestoreBackupService(backups, restores, targets, adapters,
+                ArtifactStorageService.localOnly(storage), encryption,
+                executor, Clock.fixed(NOW, ZoneOffset.UTC), new BackupActivityGuard(), notifications);
     }
 
     // --- accepting ----------------------------------------------------------
@@ -172,6 +177,8 @@ class RestoreBackupServiceTest {
         verify(restores, Mockito.times(2)).save(saved.capture());
         assertThat(saved.getAllValues().get(1).getStatus()).isEqualTo(ExecutionStatus.FAILED);
         assertThat(saved.getAllValues().get(1).getErrorMessage()).contains("Too many jobs");
+        verify(notifications).publishRestore(any(), any(),
+                eq(saved.getAllValues().get(1)), eq(NotificationEventType.RESTORE_FAILED));
     }
 
     @Test
@@ -198,11 +205,13 @@ class RestoreBackupServiceTest {
         runQueuedWork(service.start(BACKUP_ID, TARGET_ID));
 
         ArgumentCaptor<DatabaseConnection> connection = ArgumentCaptor.forClass(DatabaseConnection.class);
-        verify(restoreEngine).restore(connection.capture(), eq(Path.of(ARTIFACT)));
+        verify(restoreEngine).restore(connection.capture(), eq("shop"), eq(Path.of(ARTIFACT)));
         assertThat(connection.getValue().password()).isEqualTo("s3cr3t");
         assertThat(connection.getValue().database()).isEqualTo("shop");
         assertThat(lastSaved().getStatus()).isEqualTo(ExecutionStatus.SUCCEEDED);
         assertThat(lastSaved().getFinishedAt()).isEqualTo(NOW);
+        verify(notifications).publishRestore(any(), any(), any(), eq(NotificationEventType.RESTORE_STARTED));
+        verify(notifications).publishRestore(any(), any(), any(), eq(NotificationEventType.RESTORE_SUCCESS));
     }
 
     @Test
@@ -213,7 +222,7 @@ class RestoreBackupServiceTest {
         givenArtifactIntact();
         when(encryption.decryptFor(any(), any())).thenReturn("s3cr3t");
         Mockito.doThrow(new RestoreFailedException("mysql exited with 1: Access denied"))
-                .when(restoreEngine).restore(any(), any());
+                .when(restoreEngine).restore(any(), any(), any());
 
         runQueuedWork(service.start(BACKUP_ID, TARGET_ID));
 
@@ -255,12 +264,16 @@ class RestoreBackupServiceTest {
         queue.forEach(Runnable::run);
 
         ArgumentCaptor<DatabaseConnection> connection = ArgumentCaptor.forClass(DatabaseConnection.class);
-        verify(restoreEngine).restore(connection.capture(), eq(Path.of(ARTIFACT)));
+        verify(restoreEngine).restore(connection.capture(), eq("shop"), eq(Path.of(ARTIFACT)));
         assertThat(connection.getValue().host()).isEqualTo("scratch.internal");
         assertThat(connection.getValue().database()).isEqualTo("shop_restore_test");
         assertThat(connection.getValue().password()).isEqualTo("dr1ll");
         assertThat(lastSaved().getTargetId()).isEqualTo(otherId);
         verify(targets).findById(TARGET_ID);
+        ArgumentCaptor<DatabaseTarget> notifiedDestination = ArgumentCaptor.forClass(DatabaseTarget.class);
+        verify(notifications).publishRestore(any(), notifiedDestination.capture(), any(),
+                eq(NotificationEventType.RESTORE_SUCCESS));
+        assertThat(notifiedDestination.getValue().getId()).isEqualTo(otherId);
     }
 
     @Test
@@ -343,10 +356,13 @@ class RestoreBackupServiceTest {
         RestoreExecution stranded =
                 RestoreExecution.started(UUID.randomUUID(), BACKUP_ID, TARGET_ID, NOW.minusSeconds(900));
         when(restores.findRunning()).thenReturn(List.of(stranded));
+        givenSucceededBackup();
+        givenTarget();
         givenSaveEchoes();
 
         assertThat(service.failInterruptedRestores()).isEqualTo(1);
         assertThat(lastSaved().getErrorMessage()).contains("the application stopped");
+        verify(notifications).publishRestore(any(), any(), any(), eq(NotificationEventType.RESTORE_FAILED));
     }
 
     @Test

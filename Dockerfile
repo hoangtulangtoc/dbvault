@@ -18,8 +18,14 @@ COPY web web
 # real machine is the gate, and CI runs it.
 RUN --mount=type=cache,target=/root/.m2 mvn -B -DskipTests package
 
+FROM docker:27.5.1-cli AS docker-cli
 
-FROM eclipse-temurin:21-jre
+
+FROM eclipse-temurin:21-jre-noble
+
+# The daemon stays on the host. This client is dormant unless restore
+# verification is enabled and the operator explicitly mounts docker.sock.
+COPY --from=docker-cli /usr/local/bin/docker /usr/local/bin/docker
 
 # The application drives these binaries directly and refuses to start without
 # them; installing them here is what makes the image self-contained. Ubuntu's
@@ -28,9 +34,18 @@ FROM eclipse-temurin:21-jre
 # curl is only here for the HEALTHCHECK below.
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        ca-certificates \
+        curl \
+        gnupg \
+    && curl -fsSL https://pgp.mongodb.com/server-8.0.asc \
+        | gpg --dearmor --yes -o /usr/share/keyrings/mongodb-server-8.0.gpg \
+    && echo "deb [arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-8.0.gpg] https://repo.mongodb.org/apt/ubuntu noble/mongodb-org/8.0 multiverse" \
+        > /etc/apt/sources.list.d/mongodb-org-8.0.list \
+    && apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        mongodb-database-tools \
         mysql-client \
         postgresql-client \
-        curl \
     && rm -rf /var/lib/apt/lists/*
 
 RUN useradd --system --create-home --uid 10001 dbvault \
@@ -47,6 +62,8 @@ ENV BACKUP_DIR=/var/lib/dbvault/backups \
     PSQL_PATH=/usr/bin/psql \
     PG_DUMP_PATH=/usr/bin/pg_dump \
     PG_RESTORE_PATH=/usr/bin/pg_restore \
+    MONGODUMP_PATH=/usr/bin/mongodump \
+    MONGORESTORE_PATH=/usr/bin/mongorestore \
     JAVA_OPTS="-XX:MaxRAMPercentage=75"
 
 # Backups are the point of this tool. Mount a volume here or they die with the
