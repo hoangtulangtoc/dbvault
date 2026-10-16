@@ -30,11 +30,10 @@ import dev.dbvault.core.model.DatabaseTarget;
 import dev.dbvault.core.model.RestoreVerificationExecution;
 import dev.dbvault.core.port.BackupExecutionRepository;
 import dev.dbvault.core.port.RestoreVerificationExecutionRepository;
-import dev.dbvault.web.api.LegacyApiRedirectController;
 import dev.dbvault.web.api.TargetApiController;
 import dev.dbvault.web.api.VerificationApiController;
 
-@WebMvcTest({ TargetApiController.class, VerificationApiController.class, LegacyApiRedirectController.class })
+@WebMvcTest({ TargetApiController.class, VerificationApiController.class })
 @Import({ ApiSecurityConfig.class, SecurityConfig.class, OperatorAccountConfig.class })
 @TestPropertySource(properties = {
         "dbvault.operator.username=operator",
@@ -125,12 +124,11 @@ class ApiSecurityTest {
     }
 
     @Test
-    void anUnversionedPathIsAPermanentRedirectToVersionOne() throws Exception {
-        mockMvc.perform(get("/api/targets/{id}/backups", SHOP).queryParam("page", "2")
-                        .with(httpBasic("operator", PASSWORD)))
-                .andExpect(status().isPermanentRedirect())
-                .andExpect(header().string("Location", "/api/v1/targets/" + SHOP + "/backups?page=2"))
-                .andExpect(header().string("Deprecation", "true"));
+    void theUnversionedPathsAreGone() throws Exception {
+        mockMvc.perform(get("/api/targets").with(httpBasic("operator", PASSWORD)))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(get("/api/targets/{id}/backups", SHOP).with(httpBasic("operator", PASSWORD)))
+                .andExpect(status().isNotFound());
     }
 
     @Test

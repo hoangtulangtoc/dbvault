@@ -20,10 +20,10 @@ verification:
 - `POST /api/v1/backups/{id}/verifications` → `202`, `Location` of the attempt
 - `GET /api/v1/verifications/{id}`
 
-The unversioned paths answer `308 Permanent Redirect` to their `/api/v1` path,
-with `Deprecation: true` and a `successor-version` link, until they are removed
-in the same release. A later incompatible change gets `/api/v2`; `/api/v1` then
-keeps its behaviour.
+The unversioned paths answered `308 Permanent Redirect` to their `/api/v1` path,
+with `Deprecation: true` and a `successor-version` link, only while 0.3.0 was in
+development; they are removed before it ships and now answer `404`. A later
+incompatible change gets `/api/v2`; `/api/v1` then keeps its behaviour.
 
 The API chain keeps HTTP Basic on every request and creates no session. It
 reads no cookie, so CSRF protection, which guards cookie-authenticated
@@ -31,8 +31,8 @@ requests, is off for it; the console's chain keeps it.
 
 ## Consequences
 
-- A client that does not follow redirects, dbvault-cli 0.2 included, must use
-  `/api/v1` itself. This is a breaking change for such scripts.
+- Every client must use `/api/v1`; dbvault-cli 0.2 and scripts written against
+  `/api` stop working. This is a breaking change for them.
 - Errors stay `{"error": "..."}`: `404` for an unknown target, backup or attempt,
   `409` when a verification cannot start (disabled, unsupported, unavailable, or
   a backup that did not succeed).
