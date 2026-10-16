@@ -105,7 +105,21 @@ public final class StorageProfile {
         if (!present(value)) {
             return "";
         }
-        String result = value.strip().replaceAll("^/+|/+$", "");
+        String stripped = value.strip();
+        // Length first, and slashes trimmed by index rather than a regex: an anchored /+$ is
+        // quadratic on a long run of slashes, and this value comes from a form.
+        if (stripped.length() > 1026) {
+            throw new IllegalArgumentException("Key prefix is invalid");
+        }
+        int start = 0;
+        int end = stripped.length();
+        while (start < end && stripped.charAt(start) == '/') {
+            start++;
+        }
+        while (end > start && stripped.charAt(end - 1) == '/') {
+            end--;
+        }
+        String result = stripped.substring(start, end);
         if (result.length() > 1024 || result.contains("//") || result.chars().anyMatch(Character::isISOControl)) {
             throw new IllegalArgumentException("Key prefix is invalid");
         }

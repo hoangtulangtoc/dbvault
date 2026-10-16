@@ -55,6 +55,17 @@ class StorageProfileTest {
         assertThat(connection.toString()).doesNotContain("access-must-not-be-logged", "secret-must-not-be-logged");
     }
 
+    @Test
+    void prefixSlashesAreTrimmedAndALongRunOfThemIsRefusedQuickly() {
+        assertThat(staticProfile(null, "//daily/db//".replace("//d", "/d").replace("db//", "db/")).getKeyPrefix())
+                .isEqualTo("daily/db");
+        String slashes = "/".repeat(100_000);
+        long started = System.nanoTime();
+        assertThatThrownBy(() -> staticProfile(null, slashes + "x"))
+                .hasMessageContaining("Key prefix is invalid");
+        assertThat(System.nanoTime() - started).isLessThan(1_000_000_000L);
+    }
+
     private static StorageProfile staticProfile(String endpoint, String prefix) {
         return StorageProfile.builder().id(UUID.randomUUID()).name("archive").endpoint(endpoint)
                 .region("us-east-1").bucket("backups").keyPrefix(prefix).pathStyle(true)
