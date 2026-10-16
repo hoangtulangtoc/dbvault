@@ -54,7 +54,7 @@
 
       <dt>Size</dt>
       <dd class="mono"
-          th:text="${preview.execution().sizeBytes != null ? preview.execution().sizeBytes + ' bytes' : '—'}">—</dd>
+          th:text="${byteSizes.readable(preview.execution().sizeBytes)}">—</dd>
     </dl>
   </div>
 
