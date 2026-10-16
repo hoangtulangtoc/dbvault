@@ -23,7 +23,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import dev.dbvault.adapter.process.ProcessRunner;
-import dev.dbvault.core.model.MysqlConnection;
+import dev.dbvault.core.model.DatabaseConnection;
+import dev.dbvault.core.model.DatabaseEngine;
 
 /**
  * Checks how the command line is assembled. The binary is {@code /bin/sh} —
@@ -32,8 +33,8 @@ import dev.dbvault.core.model.MysqlConnection;
 @ExtendWith(MockitoExtension.class)
 class MysqlClientTest {
 
-    private static final MysqlConnection CONNECTION =
-            new MysqlConnection("db.internal", 3307, "shop", "backup", "s3cr3t");
+    private static final DatabaseConnection CONNECTION =
+            new DatabaseConnection(DatabaseEngine.MYSQL, "db.internal", 3307, "shop", "backup", "s3cr3t");
 
     @Mock
     private ProcessRunner processRunner;

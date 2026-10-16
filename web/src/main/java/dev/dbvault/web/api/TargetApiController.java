@@ -58,11 +58,11 @@ public class TargetApiController {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", missing.getMessage()));
     }
 
-    record TargetView(UUID id, String name, String host, int port, String database, String username,
-            Instant createdAt) {
+    record TargetView(UUID id, String name, String engine, String host, int port, String database,
+            String username, Instant createdAt) {
         static TargetView of(DatabaseTarget target) {
-            return new TargetView(target.getId(), target.getName(), target.getHost(), target.getPort(),
-                    target.getDatabaseName(), target.getUsername(), target.getCreatedAt());
+            return new TargetView(target.getId(), target.getName(), target.getEngine().name(), target.getHost(),
+                    target.getPort(), target.getDatabaseName(), target.getUsername(), target.getCreatedAt());
         }
     }
 

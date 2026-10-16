@@ -272,7 +272,7 @@ class BackupExecutionRepositoryAdapterIT {
     }
 
     private static DatabaseTarget target(String name) {
-        return DatabaseTarget.builder()
+        return DatabaseTarget.builder().engine(dev.dbvault.core.model.DatabaseEngine.MYSQL)
                 .id(UUID.randomUUID())
                 .name(name)
                 .host("127.0.0.1")
