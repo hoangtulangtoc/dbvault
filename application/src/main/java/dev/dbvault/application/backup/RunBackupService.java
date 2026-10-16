@@ -115,7 +115,7 @@ public class RunBackupService {
             // Decrypted here, at the last moment and on the thread that uses
             // it, rather than being carried through the queue.
             DatabaseConnection connection =
-                    DatabaseConnection.to(target, encryption.decrypt(target.getPasswordCiphertext()));
+                    DatabaseConnection.to(target, encryption.decryptFor(target.getId(), target.getPasswordCiphertext()));
 
             long reportedSize = backupEngine.dumpTo(connection, destination.path());
             // Read back from disk once the engine has closed the file, so the

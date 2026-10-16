@@ -177,7 +177,7 @@ class RunBackupServiceTest {
     void recordsSuccessWithTheArtifactPathAndSize() {
         givenTarget();
         givenSaveEchoes();
-        when(encryption.decrypt("sealed")).thenReturn("s3cr3t");
+        when(encryption.decryptFor(any(), eq("sealed"))).thenReturn("s3cr3t");
         when(storage.locationFor(eq(TARGET_ID), any(), eq("shop_20260909_101530.sql.gz"))).thenReturn(ARTIFACT);
         when(backupEngine.dumpTo(any(), eq(ARTIFACT))).thenReturn(8192L);
         when(storage.sha256Of(ARTIFACT)).thenReturn(SHA256);
@@ -218,7 +218,7 @@ class RunBackupServiceTest {
     void retentionFailureDoesNotTurnAGoodBackupIntoAFailure() {
         givenTarget();
         givenSaveEchoes();
-        when(encryption.decrypt(any())).thenReturn("s3cr3t");
+        when(encryption.decryptFor(any(), any())).thenReturn("s3cr3t");
         when(storage.locationFor(any(), any(), any())).thenReturn(ARTIFACT);
         when(backupEngine.dumpTo(any(), any())).thenReturn(1L);
         when(storage.sha256Of(ARTIFACT)).thenReturn(SHA256);
@@ -236,7 +236,7 @@ class RunBackupServiceTest {
     void checksumsTheArtifactOnlyOnceTheDumpHasFinished() {
         givenTarget();
         givenSaveEchoes();
-        when(encryption.decrypt(any())).thenReturn("s3cr3t");
+        when(encryption.decryptFor(any(), any())).thenReturn("s3cr3t");
         when(storage.locationFor(any(), any(), any())).thenReturn(ARTIFACT);
         when(backupEngine.dumpTo(any(), any())).thenReturn(1L);
         when(storage.sha256Of(ARTIFACT)).thenReturn(SHA256);
@@ -253,7 +253,7 @@ class RunBackupServiceTest {
     void anArtifactThatCannotBeReadBackFailsTheBackupAndGoes() {
         givenTarget();
         givenSaveEchoes();
-        when(encryption.decrypt(any())).thenReturn("s3cr3t");
+        when(encryption.decryptFor(any(), any())).thenReturn("s3cr3t");
         when(storage.locationFor(any(), any(), any())).thenReturn(ARTIFACT);
         when(backupEngine.dumpTo(any(), any())).thenReturn(1L);
         when(storage.sha256Of(ARTIFACT)).thenThrow(new java.io.UncheckedIOException(
@@ -270,7 +270,7 @@ class RunBackupServiceTest {
     void handsTheEngineTheDecryptedPassword() {
         givenTarget();
         givenSaveEchoes();
-        when(encryption.decrypt("sealed")).thenReturn("s3cr3t");
+        when(encryption.decryptFor(any(), eq("sealed"))).thenReturn("s3cr3t");
         when(storage.locationFor(any(), any(), any())).thenReturn(ARTIFACT);
         when(backupEngine.dumpTo(any(), any())).thenReturn(1L);
         when(storage.sha256Of(ARTIFACT)).thenReturn(SHA256);
@@ -287,7 +287,7 @@ class RunBackupServiceTest {
     void recordsTheEnginesOwnMessageOnFailure() {
         givenTarget();
         givenSaveEchoes();
-        when(encryption.decrypt(any())).thenReturn("s3cr3t");
+        when(encryption.decryptFor(any(), any())).thenReturn("s3cr3t");
         when(storage.locationFor(any(), any(), any())).thenReturn(ARTIFACT);
         when(backupEngine.dumpTo(any(), any()))
                 .thenThrow(new BackupFailedException("mysqldump exited with 2: Access denied"));
@@ -310,7 +310,7 @@ class RunBackupServiceTest {
     void recordsAFailureAndClearsTheFileWhenSomethingUnexpectedBreaks() {
         givenTarget();
         givenSaveEchoes();
-        when(encryption.decrypt(any())).thenThrow(new IllegalStateException("key rotated"));
+        when(encryption.decryptFor(any(), any())).thenThrow(new IllegalStateException("key rotated"));
         when(storage.locationFor(any(), any(), any())).thenReturn(ARTIFACT);
 
         runQueuedWork(service.start(TARGET_ID));

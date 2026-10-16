@@ -193,7 +193,7 @@ class RestoreBackupServiceTest {
         givenTarget();
         givenSaveEchoes();
         givenArtifactIntact();
-        when(encryption.decrypt("sealed")).thenReturn("s3cr3t");
+        when(encryption.decryptFor(any(), eq("sealed"))).thenReturn("s3cr3t");
 
         runQueuedWork(service.start(BACKUP_ID, TARGET_ID));
 
@@ -211,7 +211,7 @@ class RestoreBackupServiceTest {
         givenTarget();
         givenSaveEchoes();
         givenArtifactIntact();
-        when(encryption.decrypt(any())).thenReturn("s3cr3t");
+        when(encryption.decryptFor(any(), any())).thenReturn("s3cr3t");
         Mockito.doThrow(new RestoreFailedException("mysql exited with 1: Access denied"))
                 .when(restoreEngine).restore(any(), any());
 
@@ -227,7 +227,7 @@ class RestoreBackupServiceTest {
         givenTarget();
         givenSaveEchoes();
         givenArtifactIntact();
-        when(encryption.decrypt(any())).thenThrow(new IllegalStateException("key rotated"));
+        when(encryption.decryptFor(any(), any())).thenThrow(new IllegalStateException("key rotated"));
 
         runQueuedWork(service.start(BACKUP_ID, TARGET_ID));
 
@@ -247,7 +247,7 @@ class RestoreBackupServiceTest {
                 .createdAt(NOW).build()));
         givenSaveEchoes();
         givenArtifactIntact();
-        when(encryption.decrypt("drill-sealed")).thenReturn("dr1ll");
+        when(encryption.decryptFor(any(), eq("drill-sealed"))).thenReturn("dr1ll");
 
         UUID restoreId = service.start(BACKUP_ID, otherId);
         when(restores.findById(restoreId)).thenReturn(Optional.of(
@@ -328,7 +328,7 @@ class RestoreBackupServiceTest {
         givenTarget();
         givenSaveEchoes();
         when(storage.exists(Path.of(ARTIFACT))).thenReturn(true);
-        when(encryption.decrypt(any())).thenReturn("s3cr3t");
+        when(encryption.decryptFor(any(), any())).thenReturn("s3cr3t");
 
         runQueuedWork(service.start(BACKUP_ID, TARGET_ID));
 

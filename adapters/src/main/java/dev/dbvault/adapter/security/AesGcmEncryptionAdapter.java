@@ -5,6 +5,7 @@ import java.security.GeneralSecurityException;
 import java.security.SecureRandom;
 import java.util.Arrays;
 import java.util.Base64;
+import java.util.UUID;
 
 import javax.crypto.Cipher;
 import javax.crypto.spec.GCMParameterSpec;
@@ -13,6 +14,7 @@ import javax.crypto.spec.SecretKeySpec;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
+import dev.dbvault.adapter.crypto.Hkdf;
 import dev.dbvault.core.exception.EncryptionException;
 import dev.dbvault.core.port.EncryptionPort;
 
@@ -44,8 +46,42 @@ public class AesGcmEncryptionAdapter implements EncryptionPort {
         this.key = new SecretKeySpec(decodeKey(base64Key), "AES");
     }
 
+    /** Marks a value sealed under a per-owner key; legacy values have no prefix. */
+    static final String PER_OWNER_PREFIX = "v2:";
+
     @Override
     public String encrypt(String plaintext) {
+        return seal(key, plaintext);
+    }
+
+    @Override
+    public String decrypt(String ciphertext) {
+        return open(key, ciphertext);
+    }
+
+    @Override
+    public String encryptFor(UUID owner, String plaintext) {
+        return PER_OWNER_PREFIX + seal(keyFor(owner), plaintext);
+    }
+
+    @Override
+    public String decryptFor(UUID owner, String ciphertext) {
+        if (ciphertext != null && ciphertext.startsWith(PER_OWNER_PREFIX)) {
+            return open(keyFor(owner), ciphertext.substring(PER_OWNER_PREFIX.length()));
+        }
+        // Written before per-owner keys: still under the master key until it is next edited.
+        return open(key, ciphertext);
+    }
+
+    private SecretKeySpec keyFor(UUID owner) {
+        if (owner == null) {
+            throw new EncryptionException("A per-owner key needs an owner");
+        }
+        byte[] info = ("dbvault/target-credential/" + owner).getBytes(StandardCharsets.UTF_8);
+        return new SecretKeySpec(Hkdf.derive(key.getEncoded(), null, info, KEY_LENGTH_BYTES), "AES");
+    }
+
+    private String seal(SecretKeySpec key, String plaintext) {
         if (plaintext == null) {
             throw new EncryptionException("Cannot encrypt a null value");
         }
@@ -69,8 +105,7 @@ public class AesGcmEncryptionAdapter implements EncryptionPort {
         }
     }
 
-    @Override
-    public String decrypt(String ciphertext) {
+    private String open(SecretKeySpec key, String ciphertext) {
         if (ciphertext == null || ciphertext.isBlank()) {
             throw new EncryptionException("Cannot decrypt a blank value");
         }

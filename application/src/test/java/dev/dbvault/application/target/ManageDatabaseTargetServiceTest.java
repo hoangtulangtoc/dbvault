@@ -3,6 +3,7 @@ package dev.dbvault.application.target;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -84,7 +85,7 @@ class ManageDatabaseTargetServiceTest {
 
     @Test
     void storesTheEncryptedPasswordAndNeverThePlaintext() {
-        when(encryption.encrypt("s3cr3t")).thenReturn("sealed");
+        when(encryption.encryptFor(any(), eq("s3cr3t"))).thenReturn("sealed");
         when(repository.save(any())).thenAnswer(call -> call.getArgument(0));
 
         service.register(command());
@@ -96,7 +97,7 @@ class ManageDatabaseTargetServiceTest {
 
     @Test
     void stampsTheTargetWithTheInjectedClock() {
-        when(encryption.encrypt(any())).thenReturn("sealed");
+        when(encryption.encryptFor(any(), any())).thenReturn("sealed");
         when(repository.save(any())).thenAnswer(call -> call.getArgument(0));
 
         service.register(command());
@@ -108,7 +109,7 @@ class ManageDatabaseTargetServiceTest {
 
     @Test
     void copiesEveryFieldFromTheCommand() {
-        when(encryption.encrypt(any())).thenReturn("sealed");
+        when(encryption.encryptFor(any(), any())).thenReturn("sealed");
         when(repository.save(any())).thenAnswer(call -> call.getArgument(0));
 
         service.register(command());
@@ -124,7 +125,7 @@ class ManageDatabaseTargetServiceTest {
 
     @Test
     void doesNotReachTheRepositoryWhenTheModelRejectsTheValues() {
-        when(encryption.encrypt(any())).thenReturn("sealed");
+        when(encryption.encryptFor(any(), any())).thenReturn("sealed");
 
         assertThatThrownBy(() -> service.register(
                 new RegisterTargetCommand("production",
@@ -167,7 +168,7 @@ class ManageDatabaseTargetServiceTest {
         assertThat(saved.getName()).isEqualTo("staging");
         assertThat(saved.address()).isEqualTo("10.0.0.5:3307/shop");
         assertThat(saved.getPasswordCiphertext()).isEqualTo("old-sealed");
-        verify(encryption, never()).encrypt(any());
+        verify(encryption, never()).encryptFor(any(), any());
     }
 
     @Test
@@ -175,7 +176,7 @@ class ManageDatabaseTargetServiceTest {
         DatabaseTarget stored = stored();
         when(repository.findById(stored.getId())).thenReturn(Optional.of(stored));
         when(repository.save(any())).thenAnswer(call -> call.getArgument(0));
-        when(encryption.encrypt("n3w")).thenReturn("new-sealed");
+        when(encryption.encryptFor(any(), eq("n3w"))).thenReturn("new-sealed");
 
         service.edit(stored.getId(), new EditTargetCommand("production", "127.0.0.1", 3306, "backup", "n3w"));
 

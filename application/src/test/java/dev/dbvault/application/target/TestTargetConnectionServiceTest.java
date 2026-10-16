@@ -73,7 +73,7 @@ class TestTargetConnectionServiceTest {
     @Test
     void decryptsThePasswordAndHandsTheAdapterPlainText() {
         givenTarget();
-        when(encryption.decrypt("sealed")).thenReturn("s3cr3t");
+        when(encryption.decryptFor(any(), eq("sealed"))).thenReturn("s3cr3t");
         when(connectionTest.test(any())).thenReturn(ConnectionTestPort.Result.ok());
 
         service.test(TARGET_ID);
@@ -89,7 +89,7 @@ class TestTargetConnectionServiceTest {
     @Test
     void recordsASuccessfulCheckStampedWithTheInjectedClock() {
         givenTarget();
-        when(encryption.decrypt(any())).thenReturn("s3cr3t");
+        when(encryption.decryptFor(any(), any())).thenReturn("s3cr3t");
         when(connectionTest.test(any())).thenReturn(ConnectionTestPort.Result.ok());
 
         ConnectionCheck returned = service.test(TARGET_ID);
@@ -103,7 +103,7 @@ class TestTargetConnectionServiceTest {
     @Test
     void recordsTheFailureMessageVerbatim() {
         givenTarget();
-        when(encryption.decrypt(any())).thenReturn("s3cr3t");
+        when(encryption.decryptFor(any(), any())).thenReturn("s3cr3t");
         when(connectionTest.test(any())).thenReturn(
                 ConnectionTestPort.Result.failed("ERROR 1045 (28000): Access denied for user 'backup'@'%'"));
 
@@ -123,7 +123,7 @@ class TestTargetConnectionServiceTest {
     @Test
     void neverSavesTheWholeTarget() {
         givenTarget();
-        when(encryption.decrypt(any())).thenReturn("s3cr3t");
+        when(encryption.decryptFor(any(), any())).thenReturn("s3cr3t");
         when(connectionTest.test(any())).thenReturn(ConnectionTestPort.Result.ok());
 
         service.test(TARGET_ID);
