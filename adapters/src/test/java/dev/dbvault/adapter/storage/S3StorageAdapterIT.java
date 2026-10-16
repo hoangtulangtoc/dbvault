@@ -27,8 +27,18 @@ import software.amazon.awssdk.services.s3.S3Client;
 class S3StorageAdapterIT {
     private static final int HTTP_PORT = 9090;
 
+    // No credentials in source: CI passes repository secrets, a local run makes a fresh pair.
+    private static final String ACCESS_KEY = credential("S3_TEST_ACCESS_KEY");
+    private static final String SECRET_KEY = credential("S3_TEST_SECRET_KEY");
+
+    private static String credential(String variable) {
+        String value = System.getenv(variable);
+        return value != null && !value.isBlank() ? value : java.util.UUID.randomUUID().toString().replace("-", "");
+    }
+
     @Container
-    static final GenericContainer<?> S3 = new GenericContainer<>(DockerImageName.parse("adobe/s3mock:5.1.0"))
+    static final GenericContainer<?> S3 = new GenericContainer<>(DockerImageName.parse(
+            "adobe/s3mock:5.1.0@sha256:65cf60155a2e235fe7d5bf6c633747d6fc7ed93f9f5a6727d86470026b83c2a2"))
             .withEnv("initialBuckets", "backups")
             .withExposedPorts(HTTP_PORT)
             .waitingFor(Wait.forListeningPort());
@@ -40,7 +50,7 @@ class S3StorageAdapterIT {
     static void createBucket() {
         try (S3Client client = S3Client.builder().endpointOverride(java.net.URI.create(endpoint()))
                 .region(Region.US_EAST_1).forcePathStyle(true)
-                .credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials.create("access", "secret")))
+                .credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials.create(ACCESS_KEY, SECRET_KEY)))
                 .build()) {
             client.createBucket(b -> b.bucket("backups"));
         }
@@ -86,8 +96,8 @@ class S3StorageAdapterIT {
     private static S3StorageConnection connection(StorageCredentialMode mode) {
         return new S3StorageConnection(endpoint(),
                 "us-east-1", "backups", "integration", true, mode,
-                mode == StorageCredentialMode.STATIC ? "access" : null,
-                mode == StorageCredentialMode.STATIC ? "secret" : null);
+                mode == StorageCredentialMode.STATIC ? ACCESS_KEY : null,
+                mode == StorageCredentialMode.STATIC ? SECRET_KEY : null);
     }
 
     private static String endpoint() {
