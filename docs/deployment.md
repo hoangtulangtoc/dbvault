@@ -15,7 +15,8 @@ distinction is load-bearing: MariaDB's `mysqldump` rejects
 `--set-gtid-purged`, which this tool always passes, so every MySQL backup would
 fail. The PostgreSQL package supplies `psql`, `pg_dump` and `pg_restore`; the
 MongoDB package supplies `mongodump` and `mongorestore`. Anyone changing the
-base image must check all seven binaries again.
+base image must check all seven binaries again. The libraries inside the jar and
+their licences are listed in the jar itself; see [licences.md](licences.md).
 
 It runs as an unprivileged user, `dbvault` (uid 10001), and its healthcheck
 asks `/actuator/health`, so it only reports healthy once the application is up
