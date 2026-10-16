@@ -22,6 +22,7 @@ import dev.dbvault.core.model.BackupExecution;
 import dev.dbvault.core.model.DatabaseTarget;
 import dev.dbvault.core.model.RestoreExecution;
 import dev.dbvault.core.port.BackupExecutionRepository;
+import dev.dbvault.core.port.HistoryPage;
 import dev.dbvault.core.port.RestoreExecutionRepository;
 
 import lombok.RequiredArgsConstructor;
@@ -37,9 +38,12 @@ public class RestoreController {
     private final ManageDatabaseTargetService targets;
 
     @GetMapping
-    String list(Model model) {
-        model.addAttribute("restores", restores.findAllNewestFirst());
-        model.addAttribute("backups", backupsById());
+    String list(@RequestParam(name = "page", defaultValue = "1") int page, Model model) {
+        HistoryPage<RestoreExecution> history =
+                restores.findNewestFirst(HistoryPaging.page(page), HistoryPaging.PAGE_SIZE);
+        model.addAttribute("history", history);
+        model.addAttribute("restores", history.items());
+        model.addAttribute("backups", backupsOf(history.items()));
         model.addAttribute("targetNames", targetNames());
         return "restore/list";
     }
@@ -143,8 +147,10 @@ public class RestoreController {
         return "restore/detail";
     }
 
-    private Map<UUID, BackupExecution> backupsById() {
-        return backups.findAllNewestFirst().stream()
+    /** Only the backups this page refers to, not the whole history. */
+    private Map<UUID, BackupExecution> backupsOf(List<RestoreExecution> page) {
+        return backups.findAllById(page.stream().map(RestoreExecution::getBackupExecutionId).distinct().toList())
+                .stream()
                 .collect(Collectors.toMap(BackupExecution::getId, b -> b));
     }
 

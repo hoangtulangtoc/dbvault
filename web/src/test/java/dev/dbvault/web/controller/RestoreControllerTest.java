@@ -34,6 +34,7 @@ import dev.dbvault.core.model.BackupExecution;
 import dev.dbvault.core.model.DatabaseTarget;
 import dev.dbvault.core.model.RestoreExecution;
 import dev.dbvault.core.port.BackupExecutionRepository;
+import dev.dbvault.core.port.HistoryPage;
 import dev.dbvault.core.port.RestoreExecutionRepository;
 import dev.dbvault.web.security.SecurityConfig;
 
@@ -231,14 +232,30 @@ class RestoreControllerTest {
     @Test
     void theListSaysIntoWhichTargetEachRestoreWent() throws Exception {
         RestoreExecution restore = RestoreExecution.started(UUID.randomUUID(), BACKUP_ID, DRILL_ID, STARTED);
-        when(restores.findAllNewestFirst()).thenReturn(List.of(restore));
-        when(backups.findAllNewestFirst()).thenReturn(List.of(backup()));
+        when(restores.findNewestFirst(1, 50)).thenReturn(new HistoryPage<>(List.of(restore), 1, false));
+        when(backups.findAllById(List.of(BACKUP_ID))).thenReturn(List.of(backup()));
         when(targets.listAll()).thenReturn(List.of(target(), drill()));
 
         mockMvc.perform(get("/restores"))
                 .andExpect(content().string(org.hamcrest.Matchers.matchesPattern(
                         "(?s).*<td data-label=\"Into\">drill</td>.*")))
                 .andExpect(content().string(containsString("of production")));
+    }
+
+    /** Only the backups this page mentions are read, not the whole history. */
+    @Test
+    void theListIsPagedAndReadsOnlyTheBackupsItShows() throws Exception {
+        RestoreExecution restore = RestoreExecution.started(UUID.randomUUID(), BACKUP_ID, TARGET_ID, STARTED);
+        when(restores.findNewestFirst(2, 50)).thenReturn(new HistoryPage<>(List.of(restore), 2, false));
+        when(backups.findAllById(List.of(BACKUP_ID))).thenReturn(List.of(backup()));
+        when(targets.listAll()).thenReturn(List.of(target()));
+
+        mockMvc.perform(get("/restores").param("page", "2"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("href=\"/restores?page=1\"")))
+                .andExpect(content().string(containsString("of production")));
+
+        verify(backups).findAllById(List.of(BACKUP_ID));
     }
 
     @Test
@@ -252,8 +269,7 @@ class RestoreControllerTest {
 
     @Test
     void showsAnEmptyStateWhenNothingHasBeenRestored() throws Exception {
-        when(restores.findAllNewestFirst()).thenReturn(List.of());
-        when(backups.findAllNewestFirst()).thenReturn(List.of());
+        when(restores.findNewestFirst(1, 50)).thenReturn(new HistoryPage<>(List.of(), 1, false));
         when(targets.listAll()).thenReturn(List.of());
 
         mockMvc.perform(get("/restores"))
