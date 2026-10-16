@@ -59,7 +59,7 @@
             <!-- th:insert, not th:replace: replace would swap out the <td> itself
                  and leave the badge loose in the row. -->
             <td data-label="Status" th:insert="~{fragments/execution-status :: statusBadge(${execution.status})}"></td>
-            <td data-label="Size" class="mono" th:text="${execution.sizeBytes != null ? execution.sizeBytes + ' B' : '—'}">—</td>
+            <td data-label="Size" class="mono" th:text="${byteSizes.readable(execution.sizeBytes)}">—</td>
             <td class="actions">
               <div class="row-actions">
                 <a class="button button-small" th:if="${execution.status.name() == 'SUCCEEDED'}"

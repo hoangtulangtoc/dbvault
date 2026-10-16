@@ -76,7 +76,7 @@
       <dd th:text="${storageProfileName}">Local filesystem</dd>
 
       <dt>Size</dt>
-      <dd class="mono" th:text="${execution.sizeBytes != null ? execution.sizeBytes + ' bytes' : '—'}">—</dd>
+      <dd class="mono" th:text="${byteSizes.readable(execution.sizeBytes)}" th:title="${execution.sizeBytes != null ? execution.sizeBytes + ' bytes' : null}">—</dd>
 
       <!-- Of the file as stored, still gzipped: the same value sha256sum
            prints for the download. See ADR-013. -->

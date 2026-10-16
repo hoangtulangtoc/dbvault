@@ -110,7 +110,7 @@ class BackupExecutionControllerTest {
                 .andExpect(content().string(containsString(
                         "<td data-label=\"Status\"><span class=\"badge badge-success\">Succeeded</span></td>")))
                 // Which is also what keeps the size in the size column.
-                .andExpect(content().string(containsString("<td data-label=\"Size\" class=\"mono\">8192 B</td>")));
+                .andExpect(content().string(containsString("<td data-label=\"Size\" class=\"mono\">8.0 KB</td>")));
     }
 
     /** History outlives the target it refers to; it must still render. */

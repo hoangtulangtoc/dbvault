@@ -61,7 +61,7 @@
           <td data-label="Artifact" class="mono break"
               th:text="${execution.artifactPath == null ? '—'
                         : execution.artifactPath.substring(execution.artifactPath.lastIndexOf('/') + 1)}">shop_20260909_100000.sql.gz</td>
-          <td data-label="Size" class="mono" th:text="${execution.sizeBytes != null ? execution.sizeBytes + ' B' : '—'}">—</td>
+          <td data-label="Size" class="mono" th:text="${byteSizes.readable(execution.sizeBytes)}">—</td>
         </tr>
       </tbody>
     </table>
