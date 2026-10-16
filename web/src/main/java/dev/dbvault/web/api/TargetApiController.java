@@ -65,11 +65,13 @@ public class TargetApiController {
         }
     }
 
+    /** {@code sha256} is the checksum recorded when the dump was written, so a download can be verified. */
     record BackupView(UUID id, String status, Instant startedAt, Instant finishedAt, Long sizeBytes,
-            String error) {
+            String sha256, String error) {
         static BackupView of(BackupExecution execution) {
             return new BackupView(execution.getId(), execution.getStatus().name(), execution.getStartedAt(),
-                    execution.getFinishedAt(), execution.getSizeBytes(), execution.getErrorMessage());
+                    execution.getFinishedAt(), execution.getSizeBytes(), execution.getSha256(),
+                    execution.getErrorMessage());
         }
     }
 }
