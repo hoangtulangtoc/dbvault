@@ -46,13 +46,6 @@ trigger receives the row's explicit `ZoneId`. Misfires use **do nothing**: if
 the application is stopped at a fire time, it resumes at the next future fire
 instead of filling the bounded queue with stale backups.
 
-The expression is matched against wall-clock time in that zone (DBV-25).
-Quartz's own cron trigger skips a time that falls in a spring-forward gap, so a
-02:30 schedule would not run at all on the day the clocks jump from 02:00 to
-03:00. dbvault's trigger places such a time as far into the day as the jump
-(02:30 runs at 03:30), and a time the autumn change repeats runs once, at its
-first occurrence: every day the expression names gets exactly one run.
-
 ## Consequences
 
 - Schedule definitions survive restarts; volatile Quartz state is completely

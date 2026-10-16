@@ -2,24 +2,24 @@ package dev.dbvault.web.schedule;
 
 import static org.quartz.impl.matchers.GroupMatcher.jobGroupEquals;
 
-import java.text.ParseException;
 import java.time.Instant;
 import java.time.ZoneId;
-import java.util.Date;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TimeZone;
 import java.util.UUID;
 
 import org.quartz.CronExpression;
-import org.quartz.CronTrigger;
+import org.quartz.CronScheduleBuilder;
 import org.quartz.JobBuilder;
 import org.quartz.JobDetail;
 import org.quartz.JobKey;
 import org.quartz.Scheduler;
 import org.quartz.SchedulerException;
 import org.quartz.Trigger;
+import org.quartz.TriggerBuilder;
 import org.quartz.TriggerKey;
 import org.springframework.stereotype.Component;
 
@@ -62,7 +62,15 @@ public class QuartzBackupScheduler implements BackupSchedulerPort {
                 .usingJobData(SCHEDULE_ID, schedule.getId().toString())
                 .storeDurably()
                 .build();
-        Trigger trigger = trigger(schedule, jobKey, triggerKey);
+        Trigger trigger = TriggerBuilder.newTrigger()
+                .withIdentity(triggerKey)
+                .forJob(jobKey)
+                .withSchedule(CronScheduleBuilder.cronSchedule(schedule.getCronExpression())
+                        .inTimeZone(TimeZone.getTimeZone(ZoneId.of(schedule.getZoneId())))
+                        // A stopped application does not make a burst of old
+                        // backups when it returns. The next future fire wins.
+                        .withMisfireHandlingInstructionDoNothing())
+                .build();
         try {
             scheduler.addJob(job, true, true);
             if (scheduler.checkExists(triggerKey)) {
@@ -113,23 +121,6 @@ public class QuartzBackupScheduler implements BackupSchedulerPort {
             throw new IllegalStateException("Quartz could not reconcile backup schedules", e);
         }
         schedules.forEach(this::replace);
-    }
-
-    /** Once on every day the expression names, daylight saving changes included (DBV-25). */
-    private static Trigger trigger(BackupSchedule schedule, JobKey jobKey, TriggerKey triggerKey) {
-        WallClockCronTrigger trigger;
-        try {
-            trigger = new WallClockCronTrigger(schedule.getCronExpression(), ZoneId.of(schedule.getZoneId()));
-        } catch (ParseException e) {
-            throw new InvalidScheduleException("cronExpression", "This is not a valid Quartz cron expression");
-        }
-        trigger.setKey(triggerKey);
-        trigger.setJobKey(jobKey);
-        trigger.setStartTime(new Date());
-        // A stopped application does not make a burst of old backups when it returns. The next
-        // future fire wins.
-        trigger.setMisfireInstruction(CronTrigger.MISFIRE_INSTRUCTION_DO_NOTHING);
-        return trigger;
     }
 
     private static JobKey jobKey(UUID id) {
