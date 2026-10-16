@@ -100,6 +100,7 @@ class MysqlDumpBackupAdapter implements LogicalBackupPort {
                 "--host=" + MysqlClient.tcpHost(connection.host()),
                 "--port=" + connection.port(),
                 "--user=" + connection.username(),
+                MysqlClient.sslMode(connection),
                 // No --connect-timeout here: unlike the mysql client, mysqldump
                 // does not accept it and exits 7 with "unknown variable". The
                 // ProcessRunner timeout is the backstop for a dump that hangs.

@@ -54,6 +54,8 @@ public class DatabaseTargetForm {
     private String password;
     private UUID storageProfileId;
     private boolean verifyAfterBackup;
+    /** Ticked on a new form: opting out of TLS is a choice the operator makes, not a default. */
+    private boolean tlsRequired = true;
 
     public static DatabaseTargetForm blank() {
         DatabaseTargetForm form = new DatabaseTargetForm();
@@ -65,6 +67,6 @@ public class DatabaseTargetForm {
     public RegisterTargetCommand toCommand() {
         return new RegisterTargetCommand(
                 name, engine, host, port, database, username, password, authenticationDatabase,
-                storageProfileId, verifyAfterBackup);
+                storageProfileId, verifyAfterBackup, tlsRequired);
     }
 }

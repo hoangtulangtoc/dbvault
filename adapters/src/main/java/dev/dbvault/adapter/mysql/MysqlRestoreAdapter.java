@@ -93,6 +93,7 @@ class MysqlRestoreAdapter implements LogicalRestorePort {
                 "--host=" + MysqlClient.tcpHost(connection.host()),
                 "--port=" + connection.port(),
                 "--user=" + connection.username(),
+                MysqlClient.sslMode(connection),
                 "--connect-timeout=" + connectTimeout.toSeconds(),
                 // Stop at the first error instead of ploughing on and leaving a
                 // schema that is part old and part new with no error to show.

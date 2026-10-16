@@ -22,23 +22,30 @@ public record EditTargetCommand(
         String password,
         String authenticationDatabase,
         UUID storageProfileId,
-        boolean verifyAfterBackup) {
+        boolean verifyAfterBackup,
+        boolean tlsRequired) {
+
+    /** An edit after which the target's connections must be encrypted, which is the default. */
+    public EditTargetCommand(String name, String host, int port, String username, String password,
+            String authenticationDatabase, UUID storageProfileId, boolean verifyAfterBackup) {
+        this(name, host, port, username, password, authenticationDatabase, storageProfileId, verifyAfterBackup, true);
+    }
 
     /** An edit that leaves the storage destination where it is. */
     public EditTargetCommand(String name, String host, int port, String username, String password,
             String authenticationDatabase) {
-        this(name, host, port, username, password, authenticationDatabase, null, false);
+        this(name, host, port, username, password, authenticationDatabase, null, false, true);
     }
 
     /** An edit of a SQL target that leaves the storage destination where it is. */
     public EditTargetCommand(String name, String host, int port, String username, String password) {
-        this(name, host, port, username, password, null, null, false);
+        this(name, host, port, username, password, null, null, false, true);
     }
 
     /** An edit with automatic restore verification off. */
     public EditTargetCommand(String name, String host, int port, String username, String password,
             String authenticationDatabase, UUID storageProfileId) {
-        this(name, host, port, username, password, authenticationDatabase, storageProfileId, false);
+        this(name, host, port, username, password, authenticationDatabase, storageProfileId, false, true);
     }
 
     public boolean changesPassword() {

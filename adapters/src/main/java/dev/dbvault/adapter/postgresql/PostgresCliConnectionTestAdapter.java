@@ -58,9 +58,15 @@ class PostgresCliConnectionTestAdapter implements ConnectionTestPort {
         }
     }
 
+    /**
+     * What every PostgreSQL client gets. {@code PGSSLMODE=require} refuses a server that will not
+     * encrypt; libpq's default {@code prefer} quietly falls back to plain text, so an opted-out
+     * target says {@code prefer} explicitly rather than inheriting whatever the host set (ADR-041).
+     */
     static Map<String, String> environment(DatabaseConnection connection, Duration connectTimeout) {
         return Map.of(
                 "PGPASSWORD", connection.password(),
-                "PGCONNECT_TIMEOUT", Long.toString(connectTimeout.toSeconds()));
+                "PGCONNECT_TIMEOUT", Long.toString(connectTimeout.toSeconds()),
+                "PGSSLMODE", connection.tlsRequired() ? "require" : "prefer");
     }
 }

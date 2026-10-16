@@ -67,7 +67,7 @@ class MongoAdaptersTest {
         verify(runner).run(command.capture(), anyMap(), any());
         assertThat(command.getValue()).contains(
                 "--host=mongo.internal", "--port=27017", "--username=backup",
-                "--authenticationDatabase=admin", "--db=shop", "--archive");
+                "--authenticationDatabase=admin", "--db=shop", "--archive", "--tls");
         assertThat(command.getValue()).anyMatch(value -> value.startsWith(
                 "--collection=__dbvault_connection_probe_"));
         assertThat(command.getValue()).noneMatch(value -> value.contains(PASSWORD));
@@ -185,6 +185,15 @@ class MongoAdaptersTest {
         ArgumentCaptor<List<String>> command = commandCaptor();
         verify(runner, times(1)).run(command.capture(), anyMap(), any());
         assertThat(command.getValue()).contains("--dryRun").doesNotContain("--drop");
+    }
+
+    @Test
+    void aTargetThatOptedOutOfTlsConnectsWithoutIt() {
+        DatabaseConnection optedOut = new DatabaseConnection(
+                DatabaseEngine.MONGODB, "mongo.internal", 27017, "shop", "backup", PASSWORD, "admin", false);
+
+        assertThat(MongoCommand.connection(Path.of("/usr/bin/mongodump"), optedOut, Path.of("/tmp/config")))
+                .doesNotContain("--tls");
     }
 
     @Test

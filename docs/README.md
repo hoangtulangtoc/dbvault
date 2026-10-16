@@ -23,7 +23,9 @@ two backups can never share a file, by
 notification channels and per-target backup/restore event subscriptions with
 best-effort bounded delivery, and by
 [ADR-029](adr/029-isolated-restore-verification.md), which verifies successful
-backups in disposable databases without changing the backup outcome.
+backups in disposable databases without changing the backup outcome, and by
+[ADR-041](adr/041-connections-to-targets-require-tls.md), which makes every
+connection to a target require TLS unless the target opts out.
 
 These pages describe the code that exists. When a slice changes the code, it
 changes these files in the same commit.

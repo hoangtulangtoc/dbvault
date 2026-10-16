@@ -60,6 +60,9 @@ class DatabaseTargetEntity {
     @Column(name = "verify_after_backup", nullable = false)
     private boolean verifyAfterBackup;
 
+    @Column(name = "tls_required", nullable = false)
+    private boolean tlsRequired;
+
     @Column(name = "password_enc", nullable = false, columnDefinition = "text")
     private String passwordEnc;
 

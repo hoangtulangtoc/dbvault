@@ -48,6 +48,8 @@
             <div class="cell-stack">
               <span class="mono nowrap" th:text="${target.address}">127.0.0.1:3306/shop</span>
               <span class="field-hint">as <span class="mono" th:text="${target.username}">backup</span></span>
+              <span class="badge badge-warning" th:unless="${target.tlsRequired}"
+                    title="Connections to this target may be unencrypted">TLS not required</span>
             </div>
           </td>
 

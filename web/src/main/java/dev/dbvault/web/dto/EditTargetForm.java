@@ -47,6 +47,7 @@ public class EditTargetForm {
     private String password;
     private UUID storageProfileId;
     private boolean verifyAfterBackup;
+    private boolean tlsRequired = true;
 
     /** Pre-filled from the target, all but the password. */
     public static EditTargetForm of(DatabaseTarget target) {
@@ -58,11 +59,13 @@ public class EditTargetForm {
         form.setAuthenticationDatabase(target.getAuthenticationDatabase());
         form.setStorageProfileId(target.getStorageProfileId());
         form.setVerifyAfterBackup(target.isVerifyAfterBackup());
+        form.setTlsRequired(target.isTlsRequired());
         return form;
     }
 
     public EditTargetCommand toCommand() {
         return new EditTargetCommand(
-                name, host, port, username, password, authenticationDatabase, storageProfileId, verifyAfterBackup);
+                name, host, port, username, password, authenticationDatabase, storageProfileId, verifyAfterBackup,
+                tlsRequired);
     }
 }

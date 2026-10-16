@@ -19,6 +19,11 @@ final class MongoCommand {
                 "--username=" + connection.username(),
                 "--authenticationDatabase=" + connection.authenticationDatabase(),
                 "--config=" + config));
+        // The database tools have no "prefer": without --tls they never encrypt, and with it they
+        // also check the server's certificate against the image's CA store (ADR-041).
+        if (connection.tlsRequired()) {
+            command.add("--tls");
+        }
         return command;
     }
 }
