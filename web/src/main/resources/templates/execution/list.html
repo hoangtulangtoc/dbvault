@@ -1,28 +1,28 @@
 <!DOCTYPE html>
 <html lang="en" xmlns:th="http://www.thymeleaf.org"
-      th:replace="~{layout/base :: page('Backups', 'backups', ~{:: #content})}">
+      th:replace="~{layout/base :: page(#{nav.backups}, 'backups', ~{:: #content})}">
 <body>
 <div id="content">
 
   <div class="page-header">
     <div>
-      <div class="eyebrow">Operations</div>
-      <h1>Backups</h1>
-      <p>Every backup taken, newest first, across all artifact destinations.</p>
+      <div class="eyebrow" th:text="#{nav.operations}">Operations</div>
+      <h1 th:text="#{nav.backups}">Backups</h1>
+      <p th:text="#{backups.intro}">Every backup taken, newest first, across all artifact destinations.</p>
     </div>
     <!-- Outside the form it submits, through form="…": the header is where a
          page's action goes, and the table below is where the ticks are. -->
     <div class="actions" th:unless="${executions.isEmpty()}">
-      <button class="button button-danger" type="submit" form="delete-selected">Delete selected…</button>
+      <button class="button button-danger" type="submit" form="delete-selected" th:text="#{backups.deleteSelected}">Delete selected…</button>
     </div>
   </div>
 
   <p class="empty-state panel" th:if="${executions.isEmpty() and !history.hasNewer()}">
-    No backups yet. Start one from a <a th:href="@{/databases}">target</a>.
+    <span th:text="#{backups.empty.before}">No backups yet. Start one from a</span> <a th:href="@{/databases}" th:text="#{backups.empty.link}">target</a>.
   </p>
 
   <p class="empty-state panel" th:if="${executions.isEmpty() and history.hasNewer()}">
-    Nothing this far back. <a th:href="@{/executions}">Back to the newest</a>.
+    <span th:text="#{backups.pastEnd}">Nothing this far back.</span> <a th:href="@{/executions}" th:text="#{backups.pastEnd.link}">Back to the newest</a>.
   </p>
 
   <!-- A GET form, so ticking needs no script: it lands on a confirmation page
@@ -32,12 +32,12 @@
       <table>
         <thead>
           <tr>
-            <th scope="col"><span class="visually-hidden">Select</span></th>
-            <th scope="col">Started</th>
-            <th scope="col">Target</th>
-            <th scope="col">Status</th>
-            <th scope="col">Size</th>
-            <th scope="col"><span class="visually-hidden">Actions</span></th>
+            <th scope="col"><span class="visually-hidden" th:text="#{backups.col.select}">Select</span></th>
+            <th scope="col" th:text="#{backups.col.started}">Started</th>
+            <th scope="col" th:text="#{backups.col.target}">Target</th>
+            <th scope="col" th:text="#{backups.col.status}">Status</th>
+            <th scope="col" th:text="#{backups.col.size}">Size</th>
+            <th scope="col"><span class="visually-hidden" th:text="#{targets.col.actions}">Actions</span></th>
           </tr>
         </thead>
         <tbody>
@@ -48,23 +48,23 @@
                                    execution.startedAt.atOffset(T(java.time.ZoneOffset).UTC),
                                    'yyyy-MM-dd HH:mm:ss')} + ' UTC'">
             <!-- No box for a running backup: its file is still being written. -->
-            <td data-label="Select" class="select">
+            <td th:data-label="#{backups.col.select}" class="select">
               <input type="checkbox" name="id" th:value="${execution.id}"
                      th:unless="${execution.status.name() == 'RUNNING'}"
-                     th:aria-label="|Select the backup started ${started}|">
+                     th:aria-label="#{backups.selectOne(${started})}">
             </td>
-            <td data-label="Started" class="mono" th:text="${started}">…</td>
+            <td th:data-label="#{backups.col.started}" class="mono" th:text="${started}">…</td>
             <!-- A target removed after the fact leaves its history readable. -->
-            <td data-label="Target" th:text="${targetNames.getOrDefault(execution.targetId, '(removed)')}">production</td>
+            <td th:data-label="#{backups.col.target}" th:text="${targetNames.getOrDefault(execution.targetId, #messages.msg('backups.removedTarget'))}">production</td>
             <!-- th:insert, not th:replace: replace would swap out the <td> itself
                  and leave the badge loose in the row. -->
-            <td data-label="Status" th:insert="~{fragments/execution-status :: statusBadge(${execution.status})}"></td>
-            <td data-label="Size" class="mono" th:text="${byteSizes.readable(execution.sizeBytes)}">—</td>
+            <td th:data-label="#{backups.col.status}" th:insert="~{fragments/execution-status :: statusBadge(${execution.status})}"></td>
+            <td th:data-label="#{backups.col.size}" class="mono" th:text="${byteSizes.readable(execution.sizeBytes)}">—</td>
             <td class="actions">
               <div class="row-actions">
                 <a class="button button-small" th:if="${execution.status.name() == 'SUCCEEDED'}"
-                   th:href="@{/executions/{id}/download(id=${execution.id})}">Download</a>
-                <a class="button button-small" th:href="@{/executions/{id}(id=${execution.id})}">Details</a>
+                   th:href="@{/executions/{id}/download(id=${execution.id})}" th:text="#{backups.download}">Download</a>
+                <a class="button button-small" th:href="@{/executions/{id}(id=${execution.id})}" th:text="#{backups.details}">Details</a>
               </div>
             </td>
           </tr>

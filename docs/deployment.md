@@ -135,6 +135,12 @@ required**. Required means encrypted, not that the server's certificate is
 checked — except for MongoDB, whose tools check it against the image's CA store
 ([ADR-041](adr/041-connections-to-targets-require-tls.md)).
 
+**The console speaks English or Vietnamese.** Each browser picks: the sidebar
+and the sign-in page link to both, `?lang=vi` on any page does the same, and the
+choice is kept in a cookie; without one the browser's language decides. The API,
+logs and notifications stay English. Not every page is translated yet
+([ADR-042](adr/042-console-language-per-browser.md)).
+
 **Metadata PostgreSQL is not a target.** The `postgres` service in compose holds
 the application's target and execution records. It is not offered as a backup
 target automatically. Backing it up requires registering a PostgreSQL target

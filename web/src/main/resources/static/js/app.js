@@ -24,7 +24,9 @@
             el.textContent = dark ? '☀' : '☾';
         });
         document.querySelectorAll('[data-theme-label]').forEach(function (el) {
-            el.textContent = dark ? 'Light theme' : 'Dark theme';
+            // The page renders both words (data-label-light / data-label-dark) in its own
+            // language; English is only the fallback for a page that does not.
+            el.textContent = dark ? (el.dataset.labelLight || 'Light theme') : (el.dataset.labelDark || 'Dark theme');
         });
     }
 

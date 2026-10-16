@@ -22,6 +22,12 @@ spring:
   application:
     name: dbvault
 
+  # Console wording: messages.properties (English) and messages_vi.properties. A key missing from
+  # Vietnamese falls back to English, never to the server's own locale (ADR-042).
+  messages:
+    basename: messages
+    fallback-to-system-locale: false
+
   # Optional deployment-wide transport for EMAIL notification channels.
   # Recipients remain per channel; an empty host leaves only Email unavailable.
   mail:

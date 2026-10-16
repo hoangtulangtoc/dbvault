@@ -25,7 +25,9 @@ best-effort bounded delivery, and by
 [ADR-029](adr/029-isolated-restore-verification.md), which verifies successful
 backups in disposable databases without changing the backup outcome, and by
 [ADR-041](adr/041-connections-to-targets-require-tls.md), which makes every
-connection to a target require TLS unless the target opts out.
+connection to a target require TLS unless the target opts out, and by
+[ADR-042](adr/042-console-language-per-browser.md), which lets each browser pick
+an English or Vietnamese console.
 
 These pages describe the code that exists. When a slice changes the code, it
 changes these files in the same commit.
