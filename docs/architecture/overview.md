@@ -47,8 +47,8 @@ split rather than side effects of it:
   ([ADR-011](../adr/011-one-operator-account-from-the-environment.md)).
 - **Only `application` calls `EncryptionPort`.** Adapters never hold the key, so
   there is exactly one place in the system where a secret is unwrapped, and one
-  place to review. `DatabaseTarget.passwordCiphertext` holds ciphertext at every
-  moment of its life; a plaintext password belongs in a separate type named for
+  place to review. `DatabaseTarget.passwordCiphertext` and static S3 secrets hold ciphertext at every
+  moment of their life; a plaintext password belongs in a separate type named for
   what it carries.
 
 ## Metadata PostgreSQL and PostgreSQL targets are separate
@@ -134,10 +134,20 @@ are separate on purpose — see
    `@Transactional`: the row has to be visible to the background thread, which
    reads it through a different connection.
 2. **Running.** The pooled thread decrypts the password, selects the engine's
-   backup adapter, asks it for the artifact suffix, asks `StoragePort` where the
-   artifact goes, and writes the outcome onto the same row. MySQL streams
+   backup adapter, asks it for the artifact suffix, and asks
+   `ArtifactStorageService` for a local destination or private staging path.
+   It writes a provider-neutral artifact reference onto the same row. MySQL streams
    gzipped SQL to `<database>_<timestamp>.sql.gz`; PostgreSQL writes a custom
    archive to `<database>_<timestamp>.dump`.
+
+`ArtifactStorageService` is the only application router between local storage,
+staging and S3. A RUNNING execution snapshots the target's profile id. Local
+successes keep an absolute path; S3 successes keep
+`<prefix>/<target-id>/<execution-id>/<filename>`. Upload completes before the
+row becomes `SUCCEEDED`. Restore downloads to private staging and verifies
+SHA-256 before the engine starts; download and verification otherwise stream
+directly from S3. See
+[ADR-025](../adr/025-s3-storage-profiles-and-local-staging.md).
 
 Meanwhile the detail page follows the row: it re-fetches itself every two
 seconds and swaps in the part that changed, until the row reaches a finished

@@ -48,6 +48,7 @@ services:
       # no default: without it the application refuses to start. See ADR-011.
       OPERATOR_USERNAME: ${OPERATOR_USERNAME:-admin}
       OPERATOR_PASSWORD_HASH: ${OPERATOR_PASSWORD_HASH}
+      STORAGE_STAGING_DIR: /var/lib/dbvault/backups/.staging
     ports:
       - "8080:8080"
     volumes:

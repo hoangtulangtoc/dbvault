@@ -69,6 +69,15 @@ class DatabaseEngineMigrationIT {
                     "SELECT count(*)::text FROM backup_executions WHERE id = '" + backupId + "'"))
                     .isEqualTo("1");
             assertThat(single(statement,
+                    "SELECT artifact_locator FROM backup_executions WHERE id = '" + backupId + "'"))
+                    .isEqualTo("/backups/shop.sql.gz");
+            assertThat(single(statement,
+                    "SELECT storage_profile_id::text FROM backup_executions WHERE id = '" + backupId + "'"))
+                    .isNull();
+            assertThat(single(statement,
+                    "SELECT storage_profile_id::text FROM database_targets WHERE id = '" + targetId + "'"))
+                    .isNull();
+            assertThat(single(statement,
                     "SELECT count(*)::text FROM restore_executions WHERE id = '" + restoreId + "'"))
                     .isEqualTo("1");
         }

@@ -194,6 +194,18 @@
         });
     }
 
+    /* Custom S3-compatible endpoints usually require path-style access. */
+    function initStoragePathStyleDefault() {
+        var endpoint = document.querySelector('[data-storage-endpoint]');
+        var pathStyle = document.querySelector('[data-storage-path-style]');
+        if (!endpoint || !pathStyle) return;
+        var manuallyChanged = false;
+        pathStyle.addEventListener('change', function () { manuallyChanged = true; });
+        endpoint.addEventListener('input', function () {
+            if (!manuallyChanged) pathStyle.checked = endpoint.value.trim() !== '';
+        });
+    }
+
     /* A new target starts on the selected engine's conventional port. */
     function initEnginePortDefault() {
         var engine = document.querySelector('[data-engine-select]');
@@ -304,6 +316,7 @@
         initConfirmDialog();
         initSubmitGuard();
         initAutoSubmit();
+        initStoragePathStyleDefault();
         initEnginePortDefault();
         initLiveRegion();
         // A flash reports the navigation that rendered this page; once read it

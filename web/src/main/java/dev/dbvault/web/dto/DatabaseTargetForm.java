@@ -1,5 +1,7 @@
 package dev.dbvault.web.dto;
 
+import java.util.UUID;
+
 import dev.dbvault.application.target.RegisterTargetCommand;
 import dev.dbvault.core.model.DatabaseEngine;
 
@@ -47,6 +49,7 @@ public class DatabaseTargetForm {
 
     @NotBlank(message = "Password is required")
     private String password;
+    private UUID storageProfileId;
 
     public static DatabaseTargetForm blank() {
         DatabaseTargetForm form = new DatabaseTargetForm();
@@ -56,6 +59,6 @@ public class DatabaseTargetForm {
     }
 
     public RegisterTargetCommand toCommand() {
-        return new RegisterTargetCommand(name, engine, host, port, database, username, password);
+        return new RegisterTargetCommand(name, engine, host, port, database, username, password, storageProfileId);
     }
 }

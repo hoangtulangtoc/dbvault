@@ -29,6 +29,8 @@ public final class DatabaseTarget {
     private final int port;
     private final String databaseName;
     private final String username;
+    /** Null selects the built-in local filesystem destination. */
+    private final UUID storageProfileId;
 
     /**
      * The target's password, AES-256-GCM encrypted, Base64 encoded.
@@ -60,6 +62,7 @@ public final class DatabaseTarget {
             int port,
             String databaseName,
             String username,
+            UUID storageProfileId,
             String passwordCiphertext,
             Instant createdAt,
             ConnectionCheck lastConnectionCheck) {
@@ -71,6 +74,7 @@ public final class DatabaseTarget {
         this.port = port(port);
         this.databaseName = text(databaseName, "databaseName", "Database name", databaseNameLimit(engine));
         this.username = text(username, "username", "Username", usernameLimit(engine));
+        this.storageProfileId = storageProfileId;
         this.passwordCiphertext = require(passwordCiphertext, "passwordCiphertext", "Password is required");
         this.createdAt = require(createdAt, "createdAt", "Creation timestamp is required");
         this.lastConnectionCheck = lastConnectionCheck; // absent until the target is first tested
@@ -93,7 +97,8 @@ public final class DatabaseTarget {
      * @throws InvalidTargetException if a value is missing or out of range
      */
     public DatabaseTarget edited(
-            String name, String host, int port, String username, String newPasswordCiphertext) {
+            String name, String host, int port, String username, String newPasswordCiphertext,
+            UUID storageProfileId) {
 
         // Built before comparing, so the comparison sees the values as the
         // constructor normalises them — " db " and "db" are the same host.
@@ -102,6 +107,7 @@ public final class DatabaseTarget {
                 .host(host)
                 .port(port)
                 .username(username)
+                .storageProfileId(storageProfileId)
                 .passwordCiphertext(newPasswordCiphertext != null ? newPasswordCiphertext : passwordCiphertext)
                 .build();
 
@@ -110,6 +116,12 @@ public final class DatabaseTarget {
                 || edited.port != this.port
                 || !edited.username.equals(this.username);
         return connectionChanged ? edited.toBuilder().lastConnectionCheck(null).build() : edited;
+    }
+
+    /** An edit that leaves the storage destination where it is. */
+    public DatabaseTarget edited(
+            String name, String host, int port, String username, String newPasswordCiphertext) {
+        return edited(name, host, port, username, newPasswordCiphertext, storageProfileId);
     }
 
     /** True once this target has been probed at least once, whatever the outcome. */

@@ -51,6 +51,9 @@ class DatabaseTargetEntity {
     @Column(nullable = false, length = 63)
     private String username;
 
+    @Column(name = "storage_profile_id")
+    private UUID storageProfileId;
+
     @Column(name = "password_enc", nullable = false, columnDefinition = "text")
     private String passwordEnc;
 

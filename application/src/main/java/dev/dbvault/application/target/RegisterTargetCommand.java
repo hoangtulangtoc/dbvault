@@ -2,6 +2,7 @@ package dev.dbvault.application.target;
 
 import dev.dbvault.core.exception.InvalidTargetException;
 import dev.dbvault.core.model.DatabaseEngine;
+import java.util.UUID;
 
 /**
  * What the operator typed, with the password still in plain text.
@@ -16,7 +17,14 @@ public record RegisterTargetCommand(
         int port,
         String database,
         String username,
-        String password) {
+        String password,
+        UUID storageProfileId) {
+
+    /** A target whose backups stay on the built-in local storage. */
+    public RegisterTargetCommand(String name, DatabaseEngine engine, String host, int port, String database,
+            String username, String password) {
+        this(name, engine, host, port, database, username, password, null);
+    }
 
     public RegisterTargetCommand {
         if (engine == null) {

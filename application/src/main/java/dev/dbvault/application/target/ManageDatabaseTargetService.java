@@ -11,14 +11,17 @@ import dev.dbvault.application.backup.BackupArtifactService;
 import dev.dbvault.application.backup.BackupArtifactService.BulkDeletionPreview;
 import dev.dbvault.core.exception.TargetInUseException;
 import dev.dbvault.core.model.BackupExecution;
+import dev.dbvault.core.model.ConnectionCheck;
 import dev.dbvault.core.model.DatabaseTarget;
 import dev.dbvault.core.port.BackupExecutionRepository;
 import dev.dbvault.core.port.BackupScheduleRepository;
 import dev.dbvault.core.port.DatabaseTargetRepository;
 import dev.dbvault.core.port.EncryptionPort;
 import dev.dbvault.core.port.RestoreExecutionRepository;
+import dev.dbvault.core.port.StorageProfileRepository;
 
 import lombok.RequiredArgsConstructor;
+
 
 /**
  * Registering, editing, listing and removing backup targets.
@@ -28,7 +31,7 @@ import lombok.RequiredArgsConstructor;
  * at the edge of the hexagon and keep this class testable without a database;
  * an interface in front of <em>this</em> class would buy nothing.
  *
- * <p>This is also the only type in the system that calls {@link EncryptionPort}.
+ * <p>Secrets are encrypted here before they enter the target domain model.
  */
 @Service
 @RequiredArgsConstructor
@@ -66,6 +69,7 @@ public class ManageDatabaseTargetService {
     private final BackupArtifactService artifacts;
     private final EncryptionPort encryption;
     private final Clock clock;
+    private final StorageProfileRepository storageProfiles;
 
     /**
      * @throws dev.dbvault.core.exception.InvalidTargetException
@@ -74,6 +78,7 @@ public class ManageDatabaseTargetService {
      *         if the name is taken
      */
     public DatabaseTarget register(RegisterTargetCommand command) {
+        requireStorageProfile(command.storageProfileId());
         DatabaseTarget target = DatabaseTarget.builder()
                 .id(UUID.randomUUID())
                 .name(command.name())
@@ -82,6 +87,7 @@ public class ManageDatabaseTargetService {
                 .port(command.port())
                 .databaseName(command.database())
                 .username(command.username())
+                .storageProfileId(command.storageProfileId())
                 .passwordCiphertext(encryption.encrypt(command.password()))
                 .createdAt(clock.instant())
                 .build();
@@ -107,12 +113,15 @@ public class ManageDatabaseTargetService {
      *         if the new name is taken by another target
      */
     public DatabaseTarget edit(UUID id, EditTargetCommand command) {
-        DatabaseTarget edited = get(id).edited(
+        DatabaseTarget current = get(id);
+        requireStorageProfile(command.storageProfileId());
+        DatabaseTarget edited = current.edited(
                 command.name(),
                 command.host(),
                 command.port(),
                 command.username(),
-                command.changesPassword() ? encryption.encrypt(command.password()) : null);
+                command.changesPassword() ? encryption.encrypt(command.password()) : null,
+                command.storageProfileId());
 
         return repository.save(edited);
     }
@@ -194,5 +203,12 @@ public class ManageDatabaseTargetService {
 
     private static List<UUID> idsOf(List<BackupExecution> executions) {
         return executions.stream().map(BackupExecution::getId).toList();
+    }
+
+    private void requireStorageProfile(UUID id) {
+        if (id != null && storageProfiles.findById(id).isEmpty()) {
+            throw new dev.dbvault.core.exception.InvalidTargetException(
+                    "storageProfileId", "Selected storage profile no longer exists");
+        }
     }
 }

@@ -23,6 +23,7 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import dev.dbvault.application.backup.BackupArtifactService;
 import dev.dbvault.application.target.ManageDatabaseTargetService;
+import dev.dbvault.application.storage.ManageStorageProfileService;
 import dev.dbvault.core.model.BackupExecution;
 import dev.dbvault.core.model.DatabaseTarget;
 import dev.dbvault.core.port.BackupExecutionRepository;
@@ -42,6 +43,7 @@ public class BackupExecutionController {
     private final BackupExecutionRepository executions;
     private final ManageDatabaseTargetService targets;
     private final BackupArtifactService artifacts;
+    private final ManageStorageProfileService storageProfiles;
 
     @GetMapping
     String list(@RequestParam(name = "page", defaultValue = "1") int page, Model model) {
@@ -65,6 +67,9 @@ public class BackupExecutionController {
         model.addAttribute("targetName", target == null ? null : target.getName());
         model.addAttribute("targetEngine", target == null ? null : target.getEngine());
         model.addAttribute("artifactOnDisk", artifacts.isOnDisk(execution));
+        model.addAttribute("storageProfileName", execution.getStorageProfileId() == null
+                ? "Local filesystem"
+                : storageProfiles.get(execution.getStorageProfileId()).getName());
         return "execution/detail";
     }
 
@@ -83,7 +88,7 @@ public class BackupExecutionController {
                     "The artifact does not match its checksum — recorded %s, now %s. It has changed since it "
                             .formatted(result.recorded(), result.actual())
                             + "was written, and a restore from it will be refused.");
-            case MISSING -> flash.addFlashAttribute("error", "The artifact is no longer on disk");
+            case MISSING -> flash.addFlashAttribute("error", "The artifact is no longer available");
             case NOT_RECORDED -> flash.addFlashAttribute("message",
                     "This backup predates checksums, so there is nothing to compare with. Its SHA-256 now is "
                             + result.actual());

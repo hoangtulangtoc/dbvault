@@ -1,5 +1,7 @@
 package dev.dbvault.application.target;
 
+import java.util.UUID;
+
 /**
  * New connection details for an existing target, with the password — if there
  * is one — still in plain text.
@@ -17,7 +19,13 @@ public record EditTargetCommand(
         String host,
         int port,
         String username,
-        String password) {
+        String password,
+        UUID storageProfileId) {
+
+    /** An edit that leaves the storage destination where it is. */
+    public EditTargetCommand(String name, String host, int port, String username, String password) {
+        this(name, host, port, username, password, null);
+    }
 
     public boolean changesPassword() {
         return password != null && !password.isBlank();
