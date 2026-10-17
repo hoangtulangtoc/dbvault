@@ -74,7 +74,18 @@ public class MysqlClient {
                 "--host=" + tcpHost(connection.host()),
                 "--port=" + connection.port(),
                 "--user=" + connection.username(),
+                sslMode(connection),
                 "--connect-timeout=" + connectTimeout.toSeconds());
+    }
+
+    /**
+     * {@code REQUIRED} refuses a server that will not encrypt, instead of the client's default
+     * {@code PREFERRED}, which quietly falls back to plain text. It does not check the server's
+     * certificate: that takes a CA the target does not hold yet (ADR-041). Stated even when the
+     * target opted out, so an option file on the host cannot decide for it.
+     */
+    static String sslMode(DatabaseConnection connection) {
+        return "--ssl-mode=" + (connection.tlsRequired() ? "REQUIRED" : "PREFERRED");
     }
 
     /** See {@link #LOCALHOST}. */

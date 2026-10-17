@@ -220,6 +220,41 @@ class DatabaseTargetControllerTest {
     }
 
     @Test
+    void aNewTargetRequiresTlsUntilTheOperatorClearsTheBox() throws Exception {
+        mockMvc.perform(get("/databases/new"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(org.hamcrest.Matchers.matchesPattern(
+                        "(?s).*id=\"tlsRequired\"[^>]*checked.*")));
+        when(service.register(any())).thenReturn(target("production"));
+
+        // An unticked checkbox sends only Spring's "_tlsRequired" marker.
+        mockMvc.perform(post("/databases").with(csrf())
+                        .param("engine", "MYSQL")
+                        .param("name", "production")
+                        .param("host", "127.0.0.1")
+                        .param("port", "3306")
+                        .param("database", "shop")
+                        .param("username", "backup")
+                        .param("password", "s3cr3t")
+                        .param("_tlsRequired", "on"))
+                .andExpect(status().is3xxRedirection());
+
+        ArgumentCaptor<RegisterTargetCommand> command = ArgumentCaptor.forClass(RegisterTargetCommand.class);
+        verify(service).register(command.capture());
+        assertThat(command.getValue().tlsRequired()).isFalse();
+    }
+
+    @Test
+    void aTargetThatOptedOutOfTlsIsFlaggedInTheList() throws Exception {
+        when(service.listAll()).thenReturn(List.of(target("legacy").toBuilder().tlsRequired(false).build(),
+                target("production")));
+
+        mockMvc.perform(get("/databases"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("TLS not required")));
+    }
+
+    @Test
     void registersAPostgresqlTargetWithTheSelectedEngine() throws Exception {
         when(service.register(any())).thenReturn(target("analytics"));
 

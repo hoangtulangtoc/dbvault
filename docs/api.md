@@ -6,7 +6,7 @@ under `/api/v1` ([ADR-039](adr/039-http-api-is-versioned-under-api-v1.md)).
 
 | Method and path | Answer |
 | --- | --- |
-| `GET /api/v1/targets` | Every target, without its password |
+| `GET /api/v1/targets` | Every target, without its password; `tlsRequired` is `false` for a target that opted out of TLS |
 | `GET /api/v1/targets/{id}/backups` | One target's backups, newest first, without their path on the server |
 | `POST /api/v1/backups/{id}/verifications` | `202` and the new restore-verification attempt; `Location` is where to follow it |
 | `GET /api/v1/verifications/{id}` | One attempt: `status` is `RUNNING`, `SUCCEEDED` or `FAILED` |

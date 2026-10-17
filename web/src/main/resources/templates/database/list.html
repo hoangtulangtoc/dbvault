@@ -1,63 +1,66 @@
 <!DOCTYPE html>
-<html lang="en" xmlns:th="http://www.thymeleaf.org"
-      th:replace="~{layout/base :: page('Targets', 'targets', ~{:: #content})}">
+<html xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{layout/base :: page(#{nav.targets}, 'targets', ~{:: #content})}">
 <body>
 <div id="content">
 
   <div class="page-header">
     <div>
-      <div class="eyebrow">Setup</div>
-      <h1>Backup targets</h1>
-      <p>The databases this tool can back up and restore into.</p>
+      <div class="eyebrow" th:text="#{nav.setup}">Setup</div>
+      <h1 th:text="#{targets.heading}">Backup targets</h1>
+      <p th:text="#{targets.intro}">The databases this tool can back up and restore into.</p>
     </div>
     <div class="actions">
-      <a class="button button-primary" th:href="@{/databases/new}">Add target</a>
+      <a class="button button-primary" th:href="@{/databases/new}" th:text="#{targets.add}">Add target</a>
     </div>
   </div>
 
   <p class="empty-state panel" th:if="${targets.isEmpty()}">
-    No targets yet. <a th:href="@{/databases/new}">Add one</a> to get started.
+    <span th:text="#{targets.empty.before}">No targets yet.</span> <a th:href="@{/databases/new}" th:text="#{targets.empty.link}">Add one</a> <span th:text="#{targets.empty.after}">to get started.</span>
   </p>
 
   <div class="table-wrap responsive-cards" th:unless="${targets.isEmpty()}">
     <table>
       <thead>
         <tr>
-          <th scope="col">Name</th>
-          <th scope="col">Engine</th>
-          <th scope="col">Address</th>
-          <th scope="col">Destination</th>
-          <th scope="col">Last check</th>
-          <th scope="col">Last backup</th>
-          <th scope="col"><span class="visually-hidden">Actions</span></th>
+          <th scope="col" th:text="#{targets.col.name}">Name</th>
+          <th scope="col" th:text="#{targets.col.engine}">Engine</th>
+          <th scope="col" th:text="#{targets.col.address}">Address</th>
+          <th scope="col" th:text="#{targets.col.destination}">Destination</th>
+          <th scope="col" th:text="#{targets.col.lastCheck}">Last check</th>
+          <th scope="col" th:text="#{targets.col.lastBackup}">Last backup</th>
+          <th scope="col"><span class="visually-hidden" th:text="#{targets.col.actions}">Actions</span></th>
         </tr>
       </thead>
       <tbody>
         <tr th:each="target : ${targets}">
-          <td data-label="Name"><strong th:text="${target.name}">prod</strong></td>
-          <td data-label="Engine"><span class="badge badge-neutral" th:text="${target.engine.displayName}">MySQL</span></td>
-          <td data-label="Destination">
-            <span th:if="${target.storageProfileId == null}">Local filesystem</span>
+          <td th:data-label="#{targets.col.name}"><strong th:text="${target.name}">prod</strong></td>
+          <td th:data-label="#{targets.col.engine}"><span class="badge badge-neutral" th:text="${target.engine.displayName}">MySQL</span></td>
+          <td th:data-label="#{targets.col.destination}">
+            <span th:if="${target.storageProfileId == null}" th:text="#{targets.localFilesystem}">Local filesystem</span>
             <a th:unless="${target.storageProfileId == null}" th:href="@{/storage/{id}/edit(id=${target.storageProfileId})}"
                th:text="${storageProfileNames.get(target.storageProfileId)}">S3 profile</a>
           </td>
           <!-- The user rides under the address rather than in a column of its
                own: with Last backup added the row no longer fitted, and who a
                target connects as is secondary to where it points. -->
-          <td data-label="Address">
+          <td th:data-label="#{targets.col.address}">
             <div class="cell-stack">
               <span class="mono nowrap" th:text="${target.address}">127.0.0.1:3306/shop</span>
-              <span class="field-hint">as <span class="mono" th:text="${target.username}">backup</span></span>
+              <span class="field-hint"><span th:text="#{targets.as}">as</span> <span class="mono" th:text="${target.username}">backup</span></span>
+              <span class="badge badge-warning" th:unless="${target.tlsRequired}"
+                    th:title="#{targets.tlsNotRequired.title}" th:text="#{targets.tlsNotRequired}"
+                    title="Connections to this target may be unencrypted">TLS not required</span>
             </div>
           </td>
 
-          <td data-label="Last check" class="check-cell">
+          <td th:data-label="#{targets.col.lastCheck}" class="check-cell">
             <div>
-              <span class="badge badge-neutral" th:unless="${target.hasBeenTested()}">Never tested</span>
+              <span class="badge badge-neutral" th:unless="${target.hasBeenTested()}" th:text="#{targets.check.never}">Never tested</span>
               <th:block th:if="${target.hasBeenTested()}">
-                <span class="badge badge-success" th:if="${target.lastConnectionCheck.successful}">Connected</span>
+                <span class="badge badge-success" th:if="${target.lastConnectionCheck.successful}" th:text="#{targets.check.connected}">Connected</span>
                 <span class="badge badge-danger" th:unless="${target.lastConnectionCheck.successful}"
-                      th:title="${target.lastConnectionCheck.message}">Failed</span>
+                      th:title="${target.lastConnectionCheck.message}" th:text="#{targets.check.failed}">Failed</span>
                 <!-- atOffset(UTC) is not optional. #temporals.format renders an
                      Instant in the JVM's default zone, so without it the label
                      says UTC while the digits are the server's local time. -->
@@ -76,47 +79,47 @@
           <!-- The newest good copy, linked; plus, when the newest attempt did
                not produce one, what it is doing instead. Timed by when the dump
                started — that is the moment the snapshot describes. -->
-          <td data-label="Last backup"
+          <td th:data-label="#{targets.col.lastBackup}"
               th:with="latest=${latestBackups.get(target.id)},
                        lastGood=${lastSuccessfulBackups.get(target.id)}">
             <div class="cell-stack">
               <a class="badge badge-warning" th:if="${latest != null and latest.status.name() == 'RUNNING'}"
-                 th:href="@{/executions/{id}(id=${latest.id})}">Running</a>
+                 th:href="@{/executions/{id}(id=${latest.id})}" th:text="#{targets.backup.running}">Running</a>
               <a class="mono nowrap" th:if="${lastGood != null}"
                  th:href="@{/executions/{id}(id=${lastGood.id})}"
                  th:text="${#temporals.format(
                              lastGood.startedAt.atOffset(T(java.time.ZoneOffset).UTC),
                              'yyyy-MM-dd HH:mm')} + ' UTC'">2026-09-09 14:48 UTC</a>
               <span class="badge badge-neutral"
-                    th:if="${lastGood == null and (latest == null or latest.status.name() != 'RUNNING')}">Never</span>
+                    th:if="${lastGood == null and (latest == null or latest.status.name() != 'RUNNING')}" th:text="#{targets.backup.never}">Never</span>
               <a class="check-message nowrap" th:if="${latest != null and latest.status.name() == 'FAILED'}"
-                 th:href="@{/executions/{id}(id=${latest.id})}">Latest attempt failed</a>
+                 th:href="@{/executions/{id}(id=${latest.id})}" th:text="#{targets.backup.latestFailed}">Latest attempt failed</a>
             </div>
           </td>
 
           <td class="actions">
             <div class="row-actions">
               <form method="post" th:action="@{/databases/{id}/test(id=${target.id})}">
-                <button class="button button-small" type="submit" data-busy-label="Testing…">Test</button>
+                <button class="button button-small" type="submit" th:attr="data-busy-label=#{targets.action.testing}" th:text="#{targets.action.test}">Test</button>
               </form>
               <form method="post" th:action="@{/databases/{id}/backup(id=${target.id})}">
-                <button class="button button-small button-primary" type="submit" data-busy-label="Starting…">Back up now</button>
+                <button class="button button-small button-primary" type="submit" th:attr="data-busy-label=#{targets.action.starting}" th:text="#{targets.action.backUp}">Back up now</button>
               </form>
-              <a class="button button-small" th:href="@{/schedules/new(target=${target.id})}">Schedule</a>
-              <a class="button button-small" th:href="@{/retention/{id}/edit(id=${target.id})}">Retention</a>
-              <a class="button button-small" th:href="@{/databases/{id}/notifications(id=${target.id})}">Notifications</a>
-              <a class="button button-small" th:href="@{/databases/{id}/edit(id=${target.id})}">Edit</a>
+              <a class="button button-small" th:href="@{/schedules/new(target=${target.id})}" th:text="#{targets.action.schedule}">Schedule</a>
+              <a class="button button-small" th:href="@{/retention/{id}/edit(id=${target.id})}" th:text="#{nav.retention}">Retention</a>
+              <a class="button button-small" th:href="@{/databases/{id}/notifications(id=${target.id})}" th:text="#{nav.notifications}">Notifications</a>
+              <a class="button button-small" th:href="@{/databases/{id}/edit(id=${target.id})}" th:text="#{targets.action.edit}">Edit</a>
               <!-- A target with backups takes them with it, so it gets a page
                    that counts them and asks for its name (ADR-015). One without
                    keeps the quick dialog; if a backup appears in between, the
                    server sends it to that page anyway. -->
               <a class="button button-small button-danger" th:if="${latestBackups.containsKey(target.id)}"
-                 th:href="@{/databases/{id}/delete(id=${target.id})}">Remove…</a>
+                 th:href="@{/databases/{id}/delete(id=${target.id})}" th:text="#{targets.action.removeMore}">Remove…</a>
               <form method="post" th:action="@{/databases/{id}/delete(id=${target.id})}"
                     th:unless="${latestBackups.containsKey(target.id)}"
-                    th:attr="data-confirm=|Remove target “${target.name}”? Its stored credentials, retention policy, and the record of any restores into it are deleted.|"
-                    data-confirm-title="Remove target" data-confirm-accept="Remove">
-                <button class="button button-small button-danger" type="submit" data-busy-label="Removing…">Remove</button>
+                    th:attr="data-confirm=#{targets.remove.confirm(${target.name})},data-confirm-title=#{targets.remove.title},data-confirm-accept=#{targets.action.remove}">
+                <button class="button button-small button-danger" type="submit"
+                        th:attr="data-busy-label=#{targets.action.removing}" th:text="#{targets.action.remove}">Remove</button>
               </form>
             </div>
           </td>

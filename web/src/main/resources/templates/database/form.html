@@ -1,19 +1,19 @@
 <!DOCTYPE html>
 <html lang="en" xmlns:th="http://www.thymeleaf.org"
-      th:replace="~{layout/base :: page(${editing == null ? 'Add target' : 'Edit target'}, 'targets', ~{:: #content})}">
+      th:replace="~{layout/base :: page(${editing == null ? #messages.msg('targetForm.title.add') : #messages.msg('targetForm.title.edit')}, 'targets', ~{:: #content})}">
 <body>
 <div id="content">
 
   <div class="page-header">
     <div>
-      <div class="eyebrow">Setup</div>
+      <div class="eyebrow" th:text="#{nav.setup}">Setup</div>
       <th:block th:if="${editing == null}">
-        <h1>Add a backup target</h1>
-        <p>A database to back up. The connection is not tried until you press Test.</p>
+        <h1 th:text="#{targetForm.add.heading}">Add a backup target</h1>
+        <p th:text="#{targetForm.add.intro}">A database to back up. The connection is not tried until you press Test.</p>
       </th:block>
       <th:block th:unless="${editing == null}">
-        <h1>Edit <span th:text="${editing.name}">production</span></h1>
-        <p>Its backups stay with it. Changing how it connects clears the last connection check.</p>
+        <h1 th:text="#{targetForm.edit.heading(${editing.name})}">Edit production</h1>
+        <p th:text="#{targetForm.edit.intro}">Its backups stay with it. Changing how it connects clears the last connection check.</p>
       </th:block>
     </div>
   </div>
@@ -25,16 +25,16 @@
 
     <div class="form-grid">
       <div class="form-group form-group-full">
-        <label for="name">Name</label>
+        <label for="name" th:text="#{targets.col.name}">Name</label>
         <input id="name" type="text" th:field="*{name}" autofocus
                aria-describedby="name-help" placeholder="production shop db"
                th:attr="aria-invalid=${#fields.hasErrors('name')} ? 'true' : null">
-        <p class="field-hint" id="name-help">How this target is listed. Must be unique.</p>
+        <p class="field-hint" id="name-help" th:text="#{targetForm.name.hint}">How this target is listed. Must be unique.</p>
         <div th:replace="~{fragments/field-error :: fieldError('name')}"></div>
       </div>
 
       <div class="form-group" th:if="${editing == null}">
-        <label for="engine">Engine</label>
+        <label for="engine" th:text="#{targets.col.engine}">Engine</label>
         <select id="engine" th:field="*{engine}" data-engine-select>
           <option th:each="candidate : ${engines}"
                   th:value="${candidate}"
@@ -45,27 +45,27 @@
       </div>
 
       <div class="form-group" th:unless="${editing == null}">
-        <label for="engine-readonly">Engine</label>
+        <label for="engine-readonly" th:text="#{targets.col.engine}">Engine</label>
         <input id="engine-readonly" type="text" readonly th:value="${editing.engine.displayName}">
-        <p class="field-hint">Fixed once registered.</p>
+        <p class="field-hint" th:text="#{targetForm.engine.fixed}">Fixed once registered.</p>
       </div>
 
       <div class="form-group">
-        <label for="host">Host</label>
+        <label for="host" th:text="#{targetForm.host}">Host</label>
         <input id="host" type="text" th:field="*{host}" placeholder="127.0.0.1"
                th:attr="aria-invalid=${#fields.hasErrors('host')} ? 'true' : null">
         <div th:replace="~{fragments/field-error :: fieldError('host')}"></div>
       </div>
 
       <div class="form-group">
-        <label for="port">Port</label>
+        <label for="port" th:text="#{targetForm.port}">Port</label>
         <input id="port" type="number" min="1" max="65535" th:field="*{port}"
                th:attr="aria-invalid=${#fields.hasErrors('port')} ? 'true' : null">
         <div th:replace="~{fragments/field-error :: fieldError('port')}"></div>
       </div>
 
       <div class="form-group" th:if="${editing == null}">
-        <label for="database">Database</label>
+        <label for="database" th:text="#{targetForm.database}">Database</label>
         <input id="database" type="text" th:field="*{database}" placeholder="shop"
                th:attr="aria-invalid=${#fields.hasErrors('database')} ? 'true' : null">
         <div th:replace="~{fragments/field-error :: fieldError('database')}"></div>
@@ -74,14 +74,14 @@
       <!-- Shown, not sent: every backup of this target is a dump of this
            database, so it cannot change. See ADR-012. -->
       <div class="form-group" th:unless="${editing == null}">
-        <label for="database">Database</label>
+        <label for="database" th:text="#{targetForm.database}">Database</label>
         <input id="database" type="text" readonly th:value="${editing.databaseName}"
                aria-describedby="database-help">
-        <p class="field-hint" id="database-help">Fixed once registered. A different database is a different target.</p>
+        <p class="field-hint" id="database-help" th:text="#{targetForm.database.fixed}">Fixed once registered. A different database is a different target.</p>
       </div>
 
       <div class="form-group">
-        <label for="username">Username</label>
+        <label for="username" th:text="#{targetForm.username}">Username</label>
         <input id="username" type="text" th:field="*{username}" autocomplete="off"
                th:attr="aria-invalid=${#fields.hasErrors('username')} ? 'true' : null">
         <div th:replace="~{fragments/field-error :: fieldError('username')}"></div>
@@ -90,34 +90,46 @@
       <div class="form-group"
            th:if="${editing == null or editing.engine.name() == 'MONGODB'}"
            data-mongodb-auth-group>
-        <label for="authenticationDatabase">Authentication database</label>
+        <label for="authenticationDatabase" th:text="#{targetForm.authDatabase}">Authentication database</label>
         <input id="authenticationDatabase" type="text" th:field="*{authenticationDatabase}"
                maxlength="64" placeholder="admin" aria-describedby="authentication-database-help"
                th:attr="aria-invalid=${#fields.hasErrors('authenticationDatabase')} ? 'true' : null">
         <p class="field-hint" id="authentication-database-help">
-          Where this MongoDB user was created. Usually <code>admin</code>.
+          <span th:text="#{targetForm.authDatabase.hint}">Where this MongoDB user was created. Usually</span> <code>admin</code>.
         </p>
         <div th:replace="~{fragments/field-error :: fieldError('authenticationDatabase')}"></div>
       </div>
 
       <div class="form-group form-group-full">
-        <label for="password">Password</label>
+        <label for="password" th:text="#{targetForm.password}">Password</label>
         <input id="password" type="password" th:field="*{password}"
                autocomplete="new-password" aria-describedby="password-help"
                th:attr="aria-invalid=${#fields.hasErrors('password')} ? 'true' : null">
-        <p class="field-hint" id="password-help" th:if="${editing == null}">Encrypted before it is stored, and never shown again.</p>
-        <p class="field-hint" id="password-help" th:unless="${editing == null}">Leave empty to keep the current password. A new one is encrypted before it is stored.</p>
+        <p class="field-hint" id="password-help" th:if="${editing == null}" th:text="#{targetForm.password.hint.add}">Encrypted before it is stored, and never shown again.</p>
+        <p class="field-hint" id="password-help" th:unless="${editing == null}" th:text="#{targetForm.password.hint.edit}">Leave empty to keep the current password. A new one is encrypted before it is stored.</p>
         <div th:replace="~{fragments/field-error :: fieldError('password')}"></div>
       </div>
 
       <div class="form-group form-group-full">
-        <label for="storageProfileId">Backup destination</label>
+        <label class="checkbox-row" for="tlsRequired">
+          <input id="tlsRequired" type="checkbox" th:field="*{tlsRequired}" aria-describedby="tlsRequired-help">
+          <span th:text="#{targetForm.tls}">Require TLS for every connection (recommended)</span>
+        </label>
+        <p class="field-hint" id="tlsRequired-help" th:text="#{targetForm.tls.hint}">Backups, restores and connection tests refuse a server that will not encrypt. Clear this only for a server that cannot speak TLS: its password and every dump would then cross the network in clear text.</p>
+        <div class="alert alert-warning" role="alert" th:unless="*{tlsRequired}" th:text="#{targetForm.tls.warning}">
+          TLS is not required: this target's password and backups may cross the network unencrypted.
+        </div>
+        <div th:replace="~{fragments/field-error :: fieldError('tlsRequired')}"></div>
+      </div>
+
+      <div class="form-group form-group-full">
+        <label for="storageProfileId" th:text="#{targetForm.destination}">Backup destination</label>
         <select id="storageProfileId" th:field="*{storageProfileId}">
-          <option value="">Local filesystem (default)</option>
+          <option value="" th:text="#{targetForm.destination.local}">Local filesystem (default)</option>
           <option th:each="profile : ${storageProfiles}" th:value="${profile.id}"
                   th:text="|${profile.name} — S3 ${profile.bucket}|">S3 profile</option>
         </select>
-        <p class="field-hint">Changing this affects new backups only. Existing artifacts stay where they are.</p>
+        <p class="field-hint" th:text="#{targetForm.destination.hint}">Changing this affects new backups only. Existing artifacts stay where they are.</p>
       </div>
 
       <div class="form-group form-group-full" data-verification-target-field
@@ -125,17 +137,17 @@
         <label class="checkbox-row" for="verifyAfterBackup">
           <input id="verifyAfterBackup" type="checkbox" th:field="*{verifyAfterBackup}"
                  th:disabled="${editing != null and !editing.engine.supportsRestoreVerification()}">
-          <span>Automatically test restore after successful backups</span>
+          <span th:text="#{targetForm.verify}">Automatically test restore after successful backups</span>
         </label>
-        <p class="field-hint">Opt-in. Network engines need restore verification enabled and access to the Docker socket.</p>
+        <p class="field-hint" th:text="#{targetForm.verify.hint}">Opt-in. Network engines need restore verification enabled and access to the Docker socket.</p>
         <div th:replace="~{fragments/field-error :: fieldError('verifyAfterBackup')}"></div>
       </div>
     </div>
 
     <div class="form-actions">
-      <button class="button button-primary" type="submit" th:if="${editing == null}" data-busy-label="Registering…">Register target</button>
-      <button class="button button-primary" type="submit" th:unless="${editing == null}" data-busy-label="Saving…">Save changes</button>
-      <a class="button button-ghost" th:href="@{/databases}">Cancel</a>
+      <button class="button button-primary" type="submit" th:if="${editing == null}" th:attr="data-busy-label=#{targetForm.registering}" th:text="#{targetForm.register}">Register target</button>
+      <button class="button button-primary" type="submit" th:unless="${editing == null}" th:attr="data-busy-label=#{targetForm.saving}" th:text="#{targetForm.save}">Save changes</button>
+      <a class="button button-ghost" th:href="@{/databases}" th:text="#{common.cancel}">Cancel</a>
     </div>
   </form>
 

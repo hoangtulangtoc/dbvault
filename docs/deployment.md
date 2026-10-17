@@ -15,7 +15,8 @@ distinction is load-bearing: MariaDB's `mysqldump` rejects
 `--set-gtid-purged`, which this tool always passes, so every MySQL backup would
 fail. The PostgreSQL package supplies `psql`, `pg_dump` and `pg_restore`; the
 MongoDB package supplies `mongodump` and `mongorestore`. Anyone changing the
-base image must check all seven binaries again.
+base image must check all seven binaries again. The libraries inside the jar and
+their licences are listed in the jar itself; see [licences.md](licences.md).
 
 It runs as an unprivileged user, `dbvault` (uid 10001), and its healthcheck
 asks `/actuator/health`, so it only reports healthy once the application is up
@@ -97,6 +98,21 @@ override the three images and the pull, startup and cleanup timeouts with the
 `DBVAULT_VERIFICATION_*` variables listed in `docker-compose.yml`. See
 [ADR-029](adr/029-isolated-restore-verification.md).
 
+**Metrics are a scrape away, monitoring is optional.** `/actuator/prometheus`
+serves dbvault's backup metrics to anything that signs in with the operator
+account over HTTP Basic, like dbvault-cli. One series per target, tagged with
+its name and engine: `dbvault_backup_last_success_timestamp_seconds`,
+`dbvault_backup_last_duration_seconds` and `dbvault_backup_last_size_bytes` of
+its newest successful backup, and `dbvault_backup_failures_24h`. They are read
+from the execution history every 30 seconds, so they survive a restart. The
+`observability` compose profile adds Prometheus and Grafana with a provisioned
+"dbvault backups" dashboard; write the two password files first
+(`observability/prometheus/dbvault-password`, the console password, and
+`observability/grafana/admin-password`), then
+`docker compose --profile observability up -d`. Neither service publishes a
+port; map Grafana's 3000 in an override file to open it. See
+[ADR-040](adr/040-backup-metrics-come-from-the-execution-history.md).
+
 **Schedules use the application's clock and one explicit zone each.** Cron
 expressions use Quartz syntax, with seconds as the first field. The schedule
 row persists in metadata PostgreSQL and its in-memory Quartz trigger is rebuilt
@@ -109,6 +125,22 @@ application replicas would create the same trigger in each replica.
 Docker host is `host.docker.internal` from inside the container; compose maps
 that name explicitly because on Linux it does not otherwise exist. A server
 elsewhere just needs to be routable from the container.
+
+**Connections to targets are encrypted.** Every target requires TLS unless its
+form's **Require TLS** box is cleared: the clients are told `--ssl-mode=REQUIRED`
+(MySQL), `PGSSLMODE=require` (PostgreSQL) or `--tls` (MongoDB), and refuse a
+server that will not encrypt. Upgrading to 1.0 switches existing targets to
+required too, so a server without TLS fails its next connection test until it
+is given TLS or its target is opted out; the list marks such a target **TLS not
+required**. Required means encrypted, not that the server's certificate is
+checked — except for MongoDB, whose tools check it against the image's CA store
+([ADR-041](adr/041-connections-to-targets-require-tls.md)).
+
+**The console speaks English or Vietnamese.** Each browser picks: the sidebar
+and the sign-in page link to both, `?lang=vi` on any page does the same, and the
+choice is kept in a cookie; without one the browser's language decides. The API,
+logs and notifications stay English. Not every page is translated yet
+([ADR-042](adr/042-console-language-per-browser.md)).
 
 **Metadata PostgreSQL is not a target.** The `postgres` service in compose holds
 the application's target and execution records. It is not offered as a backup

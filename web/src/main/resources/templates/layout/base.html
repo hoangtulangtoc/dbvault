@@ -16,7 +16,8 @@
   same theme, styles and script.
 -->
 <html lang="en" xmlns:th="http://www.thymeleaf.org" th:fragment="page(title, section, content)"
-      th:with="sectionLabel=${section == 'targets' ? 'Targets' : (section == 'storage' ? 'Storage' : (section == 'notifications' ? 'Notifications' : (section == 'schedules' ? 'Schedules' : (section == 'retention' ? 'Retention' : (section == 'backups' ? 'Backups' : (section == 'restores' ? 'Restores' : null))))))},
+      th:lang="${#locale.language}"
+      th:with="sectionLabel=${section == 'error' ? null : #messages.msgOrNull('nav.' + section)},
                sectionUrl=${section == 'storage' ? '/storage' : (section == 'notifications' ? '/notifications' : (section == 'schedules' ? '/schedules' : (section == 'retention' ? '/retention' : (section == 'backups' ? '/executions' : (section == 'restores' ? '/restores' : '/databases')))))},
                showFlash=${section != 'error'}">
 <head th:fragment="head(title)">
@@ -32,48 +33,48 @@
   <script defer th:src="@{/js/app.js}"></script>
 </head>
 <body>
-<a class="skip-link" href="#main-content">Skip to main content</a>
+<a class="skip-link" href="#main-content" th:text="#{layout.skip}">Skip to main content</a>
 <div class="app-shell">
   <header class="mobile-header">
     <button class="icon-button" type="button" data-drawer-open
-            aria-label="Open navigation" aria-controls="app-navigation">☰</button>
-    <a class="brand" th:href="@{/databases}"><img class="brand-mark" th:src="@{/svg/brand-mark.svg}" alt="" width="34" height="34"><span>Backup Utility</span></a>
-    <button class="icon-button" type="button" data-theme-toggle aria-label="Toggle color theme"><span data-theme-icon>☀</span></button>
+            th:attr="aria-label=#{layout.openNav}" aria-label="Open navigation" aria-controls="app-navigation">☰</button>
+    <a class="brand" th:href="@{/databases}"><img class="brand-mark" th:src="@{/svg/brand-mark.svg}" alt="" width="34" height="34"><span th:text="#{layout.brand}">Backup Utility</span></a>
+    <button class="icon-button" type="button" data-theme-toggle th:attr="aria-label=#{layout.toggleTheme}" aria-label="Toggle color theme"><span data-theme-icon>☀</span></button>
   </header>
 
   <div class="drawer-overlay" data-drawer-overlay hidden aria-hidden="true"></div>
   <aside id="app-navigation" class="sidebar">
     <div class="sidebar-header">
-      <a class="brand" th:href="@{/databases}"><img class="brand-mark" th:src="@{/svg/brand-mark.svg}" alt="" width="34" height="34"><span>Backup Utility</span></a>
-      <button class="icon-button sidebar-close" type="button" data-drawer-close aria-label="Close navigation">×</button>
+      <a class="brand" th:href="@{/databases}"><img class="brand-mark" th:src="@{/svg/brand-mark.svg}" alt="" width="34" height="34"><span th:text="#{layout.brand}">Backup Utility</span></a>
+      <button class="icon-button sidebar-close" type="button" data-drawer-close th:attr="aria-label=#{layout.closeNav}" aria-label="Close navigation">×</button>
     </div>
-    <nav aria-label="Primary navigation">
+    <nav th:attr="aria-label=#{layout.primaryNav}" aria-label="Primary navigation">
       <div class="nav-group">
-        <div class="nav-label">Setup</div>
+        <div class="nav-label" th:text="#{nav.setup}">Setup</div>
         <a class="nav-item" th:href="@{/databases}"
            th:classappend="${section == 'targets'} ? 'active'"
-           th:attr="aria-current=${section == 'targets' ? 'page' : null}"><span aria-hidden="true">◎</span>Targets</a>
+           th:attr="aria-current=${section == 'targets' ? 'page' : null}"><span aria-hidden="true">◎</span><th:block th:text="#{nav.targets}">Targets</th:block></a>
         <a class="nav-item" th:href="@{/storage}"
            th:classappend="${section == 'storage'} ? 'active'"
-           th:attr="aria-current=${section == 'storage' ? 'page' : null}"><span aria-hidden="true">▣</span>Storage</a>
+           th:attr="aria-current=${section == 'storage' ? 'page' : null}"><span aria-hidden="true">▣</span><th:block th:text="#{nav.storage}">Storage</th:block></a>
         <a class="nav-item" th:href="@{/notifications}"
            th:classappend="${section == 'notifications'} ? 'active'"
-           th:attr="aria-current=${section == 'notifications' ? 'page' : null}"><span aria-hidden="true">◇</span>Notifications</a>
+           th:attr="aria-current=${section == 'notifications' ? 'page' : null}"><span aria-hidden="true">◇</span><th:block th:text="#{nav.notifications}">Notifications</th:block></a>
         <a class="nav-item" th:href="@{/schedules}"
            th:classappend="${section == 'schedules'} ? 'active'"
-           th:attr="aria-current=${section == 'schedules' ? 'page' : null}"><span aria-hidden="true">◷</span>Schedules</a>
+           th:attr="aria-current=${section == 'schedules' ? 'page' : null}"><span aria-hidden="true">◷</span><th:block th:text="#{nav.schedules}">Schedules</th:block></a>
         <a class="nav-item" th:href="@{/retention}"
            th:classappend="${section == 'retention'} ? 'active'"
-           th:attr="aria-current=${section == 'retention' ? 'page' : null}"><span aria-hidden="true">⌛</span>Retention</a>
+           th:attr="aria-current=${section == 'retention' ? 'page' : null}"><span aria-hidden="true">⌛</span><th:block th:text="#{nav.retention}">Retention</th:block></a>
       </div>
       <div class="nav-group">
-        <div class="nav-label">Operations</div>
+        <div class="nav-label" th:text="#{nav.operations}">Operations</div>
         <a class="nav-item" th:href="@{/executions}"
            th:classappend="${section == 'backups'} ? 'active'"
-           th:attr="aria-current=${section == 'backups' ? 'page' : null}"><span aria-hidden="true">↻</span>Backups</a>
+           th:attr="aria-current=${section == 'backups' ? 'page' : null}"><span aria-hidden="true">↻</span><th:block th:text="#{nav.backups}">Backups</th:block></a>
         <a class="nav-item" th:href="@{/restores}"
            th:classappend="${section == 'restores'} ? 'active'"
-           th:attr="aria-current=${section == 'restores' ? 'page' : null}"><span aria-hidden="true">↶</span>Restores</a>
+           th:attr="aria-current=${section == 'restores' ? 'page' : null}"><span aria-hidden="true">↶</span><th:block th:text="#{nav.restores}">Restores</th:block></a>
       </div>
     </nav>
     <div class="sidebar-footer">
@@ -81,20 +82,28 @@
            cannot sign the operator out with an <img> tag. th:action is what
            puts the CSRF token in it. -->
       <form class="signed-in" method="post" th:action="@{/logout}" th:if="${operatorName != null}">
-        <span class="signed-in-label">Signed in as <strong th:text="${operatorName}">admin</strong></span>
-        <button class="button button-small button-ghost" type="submit" data-busy-label="Signing out…">Sign out</button>
+        <span class="signed-in-label"><th:block th:text="#{layout.signedInAs}">Signed in as</th:block> <strong th:text="${operatorName}">admin</strong></span>
+        <button class="button button-small button-ghost" type="submit" th:attr="data-busy-label=#{layout.signingOut}" th:text="#{layout.signOut}">Sign out</button>
       </form>
-      <span class="sidebar-tagline">Logical database backup</span>
+      <span class="sidebar-tagline" th:text="#{layout.tagline}">Logical database backup</span>
+      <!-- Links, not a form: ?lang= works on any page and is kept in a cookie (ADR-042). Each
+           name is written in its own language, so it is findable from the other one. -->
+      <nav class="language-switch" th:attr="aria-label=#{layout.language}" aria-label="Language">
+        <a href="?lang=en" hreflang="en" lang="en"
+           th:attr="aria-current=${#locale.language == 'en' ? 'true' : null}">English</a>
+        <a href="?lang=vi" hreflang="vi" lang="vi"
+           th:attr="aria-current=${#locale.language == 'vi' ? 'true' : null}">Tiếng Việt</a>
+      </nav>
       <button class="theme-toggle" type="button" data-theme-toggle>
-        <span data-theme-icon aria-hidden="true">☀</span><span data-theme-label>Light theme</span>
+        <span data-theme-icon aria-hidden="true">☀</span><span data-theme-label th:attr="data-label-light=#{layout.theme.light},data-label-dark=#{layout.theme.dark}" th:text="#{layout.theme.light}">Light theme</span>
       </button>
     </div>
   </aside>
 
   <div class="content-shell">
     <main id="main-content" class="page" tabindex="-1">
-      <nav class="breadcrumb" aria-label="Breadcrumb">
-        <a th:href="@{/databases}">Home</a>
+      <nav class="breadcrumb" th:attr="aria-label=#{layout.breadcrumb}" aria-label="Breadcrumb">
+        <a th:href="@{/databases}" th:text="#{layout.home}">Home</a>
         <span aria-hidden="true">/</span>
         <th:block th:if="${sectionLabel != null and title != sectionLabel}">
           <a th:href="@{${sectionUrl}}" th:text="${sectionLabel}">Section</a>
@@ -105,11 +114,11 @@
 
       <div class="flash flash-success" role="status" th:if="${showFlash and message != null}" data-flash>
         <span th:text="${message}"></span>
-        <button type="button" class="flash-dismiss" data-flash-dismiss aria-label="Dismiss message">&times;</button>
+        <button type="button" class="flash-dismiss" data-flash-dismiss th:attr="aria-label=#{layout.dismiss}" aria-label="Dismiss message">&times;</button>
       </div>
       <div class="flash flash-error" role="alert" th:if="${showFlash and error != null}" data-flash>
         <span th:text="${error}"></span>
-        <button type="button" class="flash-dismiss" data-flash-dismiss aria-label="Dismiss message">&times;</button>
+        <button type="button" class="flash-dismiss" data-flash-dismiss th:attr="aria-label=#{layout.dismiss}" aria-label="Dismiss message">&times;</button>
       </div>
 
       <th:block th:replace="${content}"></th:block>

@@ -7,7 +7,7 @@
   <parent>
     <groupId>dev.dbvault</groupId>
     <artifactId>dbvault</artifactId>
-    <version>0.3.0</version>
+    <version>1.0.0</version>
   </parent>
 
   <artifactId>web</artifactId>
@@ -49,6 +49,11 @@
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-actuator</artifactId>
+    </dependency>
+    <!-- /actuator/prometheus for the backup metrics (DBV-30). -->
+    <dependency>
+      <groupId>io.micrometer</groupId>
+      <artifactId>micrometer-registry-prometheus</artifactId>
     </dependency>
     <!-- Recurring backup triggers. Persistent schedule definitions remain in
          our own domain table and are reconciled into Quartz at startup. -->
@@ -92,6 +97,35 @@
       <plugin>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-maven-plugin</artifactId>
+      </plugin>
+      <!-- THIRD-PARTY.txt: every library the application jar bundles and its licence, written at
+           build time from the dependencies' own POMs and shipped at the root of the jar's classes.
+           A dependency that declares no licence, or a licence outside the list below, fails the
+           build instead of shipping unreported. See docs/licences.md. -->
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>license-maven-plugin</artifactId>
+        <version>2.7.1</version>
+        <executions>
+          <execution>
+            <id>third-party-report</id>
+            <goals>
+              <goal>add-third-party</goal>
+            </goals>
+            <configuration>
+              <excludedScopes>test,provided,system</excludedScopes>
+              <fileTemplate>${project.basedir}/src/license/THIRD-PARTY.ftl</fileTemplate>
+              <failOnMissing>true</failOnMissing>
+              <!-- The same licence spelled several ways reads as several licences. -->
+              <licenseMerges>
+                <licenseMerge>Apache License, Version 2.0|The Apache Software License, Version 2.0|Apache License 2.0|Apache-2.0|The Apache License, Version 2.0|Apache 2.0|Apache License Version 2.0</licenseMerge>
+                <licenseMerge>Eclipse Public License 2.0|EPL 2.0|EPL-2.0|Eclipse Public License v2.0|Eclipse Public License - v 2.0|Eclipse Public License v. 2.0</licenseMerge>
+                <licenseMerge>Eclipse Distribution License 1.0|EDL 1.0|Eclipse Distribution License - v 1.0|Eclipse Distribution License v. 1.0</licenseMerge>
+                <licenseMerge>MIT License|MIT|The MIT License|MIT license</licenseMerge>
+              </licenseMerges>
+            </configuration>
+          </execution>
+        </executions>
       </plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>

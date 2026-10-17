@@ -20,24 +20,33 @@ public record RegisterTargetCommand(
         String password,
         String authenticationDatabase,
         UUID storageProfileId,
-        boolean verifyAfterBackup) {
+        boolean verifyAfterBackup,
+        boolean tlsRequired) {
+
+    /** A target whose connections must be encrypted, which is the default. */
+    public RegisterTargetCommand(String name, DatabaseEngine engine, String host, int port, String database,
+            String username, String password, String authenticationDatabase, UUID storageProfileId,
+            boolean verifyAfterBackup) {
+        this(name, engine, host, port, database, username, password, authenticationDatabase, storageProfileId,
+                verifyAfterBackup, true);
+    }
 
     /** A target registered without automatic restore verification. */
     public RegisterTargetCommand(String name, DatabaseEngine engine, String host, int port, String database,
             String username, String password, String authenticationDatabase, UUID storageProfileId) {
-        this(name, engine, host, port, database, username, password, authenticationDatabase, storageProfileId, false);
+        this(name, engine, host, port, database, username, password, authenticationDatabase, storageProfileId, false, true);
     }
 
     /** A MongoDB target, or any target, whose backups stay on the built-in local storage. */
     public RegisterTargetCommand(String name, DatabaseEngine engine, String host, int port, String database,
             String username, String password, String authenticationDatabase) {
-        this(name, engine, host, port, database, username, password, authenticationDatabase, null, false);
+        this(name, engine, host, port, database, username, password, authenticationDatabase, null, false, true);
     }
 
     /** A target whose backups stay on the built-in local storage. */
     public RegisterTargetCommand(String name, DatabaseEngine engine, String host, int port, String database,
             String username, String password) {
-        this(name, engine, host, port, database, username, password, null, null, false);
+        this(name, engine, host, port, database, username, password, null, null, false, true);
     }
 
     public RegisterTargetCommand {

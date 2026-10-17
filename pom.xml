@@ -13,7 +13,7 @@
 
   <groupId>dev.dbvault</groupId>
   <artifactId>dbvault</artifactId>
-  <version>0.3.0</version>
+  <version>1.0.0</version>
   <packaging>pom</packaging>
 
   <name>dbvault</name>

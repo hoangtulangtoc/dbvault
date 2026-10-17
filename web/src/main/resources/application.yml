@@ -22,6 +22,12 @@ spring:
   application:
     name: dbvault
 
+  # Console wording: messages.properties (English) and messages_vi.properties. A key missing from
+  # Vietnamese falls back to English, never to the server's own locale (ADR-042).
+  messages:
+    basename: messages
+    fallback-to-system-locale: false
+
   # Optional deployment-wide transport for EMAIL notification channels.
   # Recipients remain per channel; an empty host leaves only Email unavailable.
   mail:
@@ -69,10 +75,11 @@ management:
       enabled: false
   endpoints:
     web:
-      # The healthcheck's endpoint and nothing else. It is reachable without
-      # signing in, so it says UP or DOWN and never why.
+      # The healthcheck's endpoint, reachable without signing in, so it says UP
+      # or DOWN and never why; and the Prometheus scrape, which needs the
+      # operator's credentials (ApiSecurityConfig).
       exposure:
-        include: health
+        include: health,prometheus
   endpoint:
     health:
       show-details: never

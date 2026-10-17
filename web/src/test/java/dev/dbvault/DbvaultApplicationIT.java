@@ -10,6 +10,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.Executor;
@@ -36,12 +37,14 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 import dev.dbvault.application.backup.RunBackupService;
 import dev.dbvault.application.target.ManageDatabaseTargetService;
 import dev.dbvault.application.target.RegisterTargetCommand;
+import dev.dbvault.core.model.DatabaseEngine;
 import dev.dbvault.core.model.DatabaseTarget;
 import dev.dbvault.core.port.ConnectionTestPort;
 import dev.dbvault.core.port.LogicalBackupPort;
 import dev.dbvault.core.port.LogicalRestorePort;
 import dev.dbvault.core.port.NotificationPort;
 import dev.dbvault.core.port.StoragePort;
+import dev.dbvault.web.metrics.BackupMetrics;
 
 /**
  * Boots the whole application against a real PostgreSQL.
@@ -118,6 +121,9 @@ class DbvaultApplicationIT {
     @Autowired
     private ManageDatabaseTargetService targets;
 
+    @Autowired
+    private BackupMetrics metrics;
+
     private final HttpClient browser = HttpClient.newBuilder()
             .cookieHandler(new CookieManager())
             .followRedirects(HttpClient.Redirect.NEVER)
@@ -165,6 +171,26 @@ class DbvaultApplicationIT {
         assertThat(response.statusCode()).isEqualTo(200);
         assertThat(response.body()).isEqualTo("{\"status\":\"UP\"}");
         assertThat(get("/actuator/env").statusCode()).isNotEqualTo(200);
+    }
+
+    /** The Prometheus scrape needs the operator's credentials and carries the backup metrics. */
+    @Test
+    void thePrometheusScrapeNeedsCredentialsAndCarriesTheBackupMetrics() throws Exception {
+        assertThat(get("/actuator/prometheus", "*/*").statusCode()).isEqualTo(401);
+        targets.register(new RegisterTargetCommand(
+                "metrics-shop", DatabaseEngine.MYSQL, "db.internal", 3306,
+                "shop", "backup", "s3cr3t"));
+        metrics.refresh();
+
+        HttpRequest request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/actuator/prometheus"))
+                .header("Authorization", "Basic " + Base64.getEncoder()
+                        .encodeToString((OPERATOR + ":" + PASSWORD).getBytes(StandardCharsets.UTF_8)))
+                .build();
+        HttpResponse<String> response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
+
+        assertThat(response.statusCode()).isEqualTo(200);
+        assertThat(response.headers().allValues("Set-Cookie")).isEmpty();
+        assertThat(response.body()).contains("dbvault_backup_failures_24h{engine=\"MYSQL\",target=\"metrics-shop\"} 0.0");
     }
 
     /**

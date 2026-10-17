@@ -60,7 +60,8 @@ public class DatabaseTargetController {
             Map.entry("authenticationDatabase", "authenticationDatabase"),
             Map.entry("password", "password"),
             Map.entry("storageProfileId", "storageProfileId"),
-            Map.entry("verifyAfterBackup", "verifyAfterBackup"));
+            Map.entry("verifyAfterBackup", "verifyAfterBackup"),
+            Map.entry("tlsRequired", "tlsRequired"));
 
     private final ManageDatabaseTargetService service;
     private final TestTargetConnectionService connectionTest;

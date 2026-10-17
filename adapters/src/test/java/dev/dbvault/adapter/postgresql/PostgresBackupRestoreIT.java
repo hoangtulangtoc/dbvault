@@ -188,7 +188,10 @@ class PostgresBackupRestoreIT {
                 POSTGRES.getFirstMappedPort(),
                 database,
                 POSTGRES.getUsername(),
-                POSTGRES.getPassword());
+                POSTGRES.getPassword(),
+                null,
+                // The test container does not speak TLS; MySQL's integration tests cover a required one.
+                false);
     }
 
     private static DatabaseTarget sourceTarget() {

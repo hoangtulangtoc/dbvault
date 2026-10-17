@@ -24,6 +24,7 @@ final class DatabaseTargetMapper {
         entity.setAuthenticationDatabase(target.getAuthenticationDatabase());
         entity.setStorageProfileId(target.getStorageProfileId());
         entity.setVerifyAfterBackup(target.isVerifyAfterBackup());
+        entity.setTlsRequired(target.isTlsRequired());
         entity.setPasswordEnc(target.getPasswordCiphertext());
         entity.setCreatedAt(target.getCreatedAt());
 
@@ -66,6 +67,7 @@ final class DatabaseTargetMapper {
                 .authenticationDatabase(entity.getAuthenticationDatabase())
                 .storageProfileId(entity.getStorageProfileId())
                 .verifyAfterBackup(entity.isVerifyAfterBackup())
+                .tlsRequired(entity.isTlsRequired())
                 .passwordCiphertext(entity.getPasswordEnc())
                 .createdAt(entity.getCreatedAt())
                 .lastConnectionCheck(toConnectionCheck(entity))

@@ -86,6 +86,46 @@ services:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped
 
+  # Optional monitoring (DBV-30): `docker compose --profile observability up -d`.
+  # Neither publishes a port, so nothing new is opened on the host; to look at
+  # Grafana, add a ports mapping in an override file (docs/deployment.md).
+  prometheus:
+    image: prom/prometheus:v3.14.0@sha256:5ce7540c3c00ef4ab0c9d2c995c6a5b9c421f44b4a115d97a2c7af3b1c21cbb0
+    profiles: ["observability"]
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=30d
+    volumes:
+      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro,Z
+      # Written by the operator, never committed (see prometheus.yml).
+      - ./observability/prometheus/dbvault-password:/etc/prometheus/dbvault-password:ro,Z
+      - prometheus-data:/prometheus
+    depends_on:
+      - app
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:13.2.1@sha256:f772d434e8fab0049deb2b1b30abd43342bcfca1537614aa8d36080232cf4283
+    profiles: ["observability"]
+    environment:
+      # Read from a file the operator writes, so a plain `docker compose up`
+      # without this profile needs nothing set:
+      #   printf '%s' 'a-grafana-password' > observability/grafana/admin-password
+      GF_SECURITY_ADMIN_PASSWORD__FILE: /run/secrets/grafana-admin-password
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+    volumes:
+      - ./observability/grafana/admin-password:/run/secrets/grafana-admin-password:ro,Z
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro,Z
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro,Z
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
 volumes:
   postgres-data:
   backups:
+  prometheus-data:
+  grafana-data:
