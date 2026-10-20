@@ -51,10 +51,16 @@ class MongoBackupRestoreIT {
         assertThat(MONGODUMP).isExecutable();
         assertThat(MONGORESTORE).isExecutable();
 
-        // The official image briefly starts an unauthenticated mongod while
-        // creating the root user. A listening-port or log wait can therefore
-        // finish before authentication is ready, depending on where Docker
-        // sends the temporary server's logs. Probe the actual contract.
+        // The official image briefly starts a bootstrap mongod while creating
+        // the root user. A listening-port or log wait can therefore finish
+        // before the final server is up, depending on where Docker sends the
+        // bootstrap server's logs. Probe the actual contract — and through the
+        // container's own hostname, not loopback: the bootstrap server binds
+        // 127.0.0.1 only (its entrypoint passes --bind_ip 127.0.0.1), so only
+        // the final server, started with --bind_ip_all, can answer there.
+        // Probing loopback could see the bootstrap server stay up for the
+        // whole stable window and then stop under the first test.
+        String host = MONGO.getContainerInfo().getConfig().getHostName();
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);
         long readySince = 0;
         boolean stablyReady = false;
@@ -63,7 +69,7 @@ class MongoBackupRestoreIT {
         do {
             try {
                 result = MONGO.execInContainer(
-                        "mongosh", "--quiet", "mongodb://127.0.0.1:27017/admin",
+                        "mongosh", "--quiet", "mongodb://" + host + ":27017/admin",
                         "--username", USERNAME,
                         "--password", PASSWORD,
                         "--authenticationDatabase", "admin",
