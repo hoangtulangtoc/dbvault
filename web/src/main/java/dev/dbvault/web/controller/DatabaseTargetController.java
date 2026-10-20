@@ -6,6 +6,7 @@ import java.util.NoSuchElementException;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import org.springframework.context.MessageSource;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.validation.BindingResult;
@@ -64,6 +65,7 @@ public class DatabaseTargetController {
             Map.entry("tlsRequired", "tlsRequired"));
 
     private final ManageDatabaseTargetService service;
+    private final MessageSource messages;
     private final TestTargetConnectionService connectionTest;
     private final RunBackupService backups;
     private final BackupExecutionRepository executions;
@@ -116,7 +118,7 @@ public class DatabaseTargetController {
         }
         try {
             DatabaseTarget target = service.register(form.toCommand());
-            flash.addFlashAttribute("message", "Registered target '%s'".formatted(target.getName()));
+            flash.addFlashAttribute("message", ConsoleText.of(messages, "flash.target.registered", target.getName()));
             return "redirect:/databases";
         } catch (DuplicateTargetNameException e) {
             binding.rejectValue("name", "target.duplicate", e.getMessage());
@@ -160,7 +162,7 @@ public class DatabaseTargetController {
         }
         try {
             DatabaseTarget saved = service.edit(id, form.toCommand());
-            flash.addFlashAttribute("message", "Saved target '%s'".formatted(saved.getName()));
+            flash.addFlashAttribute("message", ConsoleText.of(messages, "flash.target.saved", saved.getName()));
             return "redirect:/databases";
         } catch (DuplicateTargetNameException e) {
             binding.rejectValue("name", "target.duplicate", e.getMessage());
@@ -182,12 +184,12 @@ public class DatabaseTargetController {
         try {
             ConnectionCheck check = connectionTest.test(id);
             if (check.successful()) {
-                flash.addFlashAttribute("message", "Connection succeeded");
+                flash.addFlashAttribute("message", ConsoleText.of(messages, "flash.target.checkOk"));
             } else {
-                flash.addFlashAttribute("error", "Connection failed: " + check.message());
+                flash.addFlashAttribute("error", ConsoleText.of(messages, "flash.target.checkFailed", check.message()));
             }
         } catch (NoSuchElementException e) {
-            flash.addFlashAttribute("error", "That target no longer exists");
+            flash.addFlashAttribute("error", ConsoleText.of(messages, "flash.target.gone"));
         }
         return "redirect:/databases";
     }
@@ -202,7 +204,7 @@ public class DatabaseTargetController {
         try {
             return "redirect:/executions/" + backups.start(id);
         } catch (NoSuchElementException e) {
-            flash.addFlashAttribute("error", "That target no longer exists");
+            flash.addFlashAttribute("error", ConsoleText.of(messages, "flash.target.gone"));
             return "redirect:/databases";
         }
     }
@@ -232,19 +234,18 @@ public class DatabaseTargetController {
         try {
             target = service.get(id);
         } catch (NoSuchElementException e) {
-            flash.addFlashAttribute("message", "Target removed");
+            flash.addFlashAttribute("message", ConsoleText.of(messages, "flash.target.removed"));
             return "redirect:/databases";
         }
         boolean named = confirmation != null && target.getName().equals(confirmation.strip());
         try {
             service.delete(id, named);
-            flash.addFlashAttribute("message", "Target '%s' removed".formatted(target.getName()));
+            flash.addFlashAttribute("message", ConsoleText.of(messages, "flash.target.removedNamed", target.getName()));
             return "redirect:/databases";
         } catch (TargetInUseException e) {
             flash.addFlashAttribute("error", confirmation == null || confirmation.isBlank()
                     ? e.getMessage()
-                    : "Type the target's name exactly — '%s' — to remove it with its backups"
-                            .formatted(target.getName()));
+                    : ConsoleText.of(messages, "flash.target.typeName", target.getName()));
         } catch (IllegalStateException e) {
             flash.addFlashAttribute("error", e.getMessage());
         }
@@ -262,8 +263,8 @@ public class DatabaseTargetController {
         return FORM_VIEW;
     }
 
-    private static String targetGone(RedirectAttributes flash) {
-        flash.addFlashAttribute("error", "That target no longer exists");
+    private String targetGone(RedirectAttributes flash) {
+        flash.addFlashAttribute("error", ConsoleText.of(messages, "flash.target.gone"));
         return "redirect:/databases";
     }
 

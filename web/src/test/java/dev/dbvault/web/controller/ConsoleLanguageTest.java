@@ -4,17 +4,24 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
 import static org.mockito.Mockito.when;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.cookie;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.flash;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.text.MessageFormat;
 import java.util.List;
+import java.util.Locale;
+import java.util.NoSuchElementException;
 import java.util.Properties;
+import java.util.UUID;
 
 import jakarta.servlet.http.Cookie;
 
@@ -105,6 +112,43 @@ class ConsoleLanguageTest {
         mockMvc.perform(get("/databases/new").param("lang", "vi"))
                 .andExpect(content().string(containsString("Bắt buộc TLS cho mọi kết nối (khuyến nghị)")))
                 .andExpect(content().string(containsString("Đăng ký đích")));
+    }
+
+    @Test
+    void aFormCheckSpeaksTheBrowsersLanguage() throws Exception {
+        mockMvc.perform(post("/databases").with(csrf()).cookie(new Cookie("dbvault_lang", "vi")))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("Cần nhập tên")))
+                .andExpect(content().string(containsString("Cần nhập máy chủ")));
+    }
+
+    @Test
+    void aFlashMessageSpeaksTheLanguageOfTheRequestThatSetIt() throws Exception {
+        UUID id = UUID.randomUUID();
+        when(service.get(id)).thenThrow(new NoSuchElementException("gone"));
+
+        mockMvc.perform(get("/databases/{id}/edit", id).cookie(new Cookie("dbvault_lang", "vi")))
+                .andExpect(flash().attribute("error", "Đích đó không còn nữa"));
+        mockMvc.perform(get("/databases/{id}/edit", id))
+                .andExpect(flash().attribute("error", "That target no longer exists"));
+    }
+
+    /** A stray quote in a pattern with arguments would swallow them; every pattern must format. */
+    @Test
+    void everyPatternWithArgumentsFormats() throws IOException {
+        for (String bundle : List.of("/messages.properties", "/messages_vi.properties")) {
+            Properties messages = load(bundle);
+            for (String key : messages.stringPropertyNames()) {
+                String pattern = messages.getProperty(key);
+                if (!pattern.matches("(?s).*\\{\\d.*")) {
+                    continue;
+                }
+                // Numbers, which a {0} and a {0,number,#} both accept. A quote that swallowed a
+                // placeholder leaves it in the text.
+                String text = new MessageFormat(pattern, Locale.ENGLISH).format(new Object[] {7, 8, 9});
+                assertThat(text).as(bundle + " " + key).doesNotContain("{");
+            }
+        }
     }
 
     @Test

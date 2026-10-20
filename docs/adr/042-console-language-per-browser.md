@@ -31,10 +31,17 @@ its templates and controllers.
 
 ## Consequences
 
-- The first slice translates the shell (navigation, sign-in, theme and
-  language switches), the Targets list and form, the Backups list, execution
-  status badges and the pager. The other pages, the confirmation dialogs they
-  open, validation messages and flash messages still speak English until they
-  move to keys; DBV-31 stays open for them.
+- Every console page is translated: the shell, targets, storage, notification
+  channels and subscriptions, schedules, retention, backups, restores and the
+  error page, with the confirmation dialogs they open, the form checks
+  (validation messages resolve `{key}` through the same bundle) and the flash
+  messages, which controllers write in the language of the request that set
+  them. Wording a script shows (the live job follower) comes from `data-`
+  attributes the page rendered. DBV-31 is done: the first slice covered the
+  shell, the Targets pages, the Backups list, status badges and the pager; the
+  second covered the rest.
+- A pattern with arguments goes through `MessageFormat`, so a quote in it is
+  written twice (`''{0}''`); a test formats every such pattern in both bundles.
+  Byte counts use `{0,number,#}` so they keep the exact figure without grouping.
 - Error text from the engines' own clients (a MySQL "Access denied", for
   example) is shown as the client wrote it, in every language.

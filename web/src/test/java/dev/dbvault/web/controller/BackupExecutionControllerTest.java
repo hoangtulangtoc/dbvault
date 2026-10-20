@@ -228,8 +228,7 @@ class BackupExecutionControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(view().name("execution/delete"))
                 .andExpect(content().string(org.hamcrest.Matchers.containsString("There is no undo")))
-                .andExpect(content().string(containsString("<span>2</span>")))
-                .andExpect(content().string(containsString("restore records refer to this backup and are deleted with it")))
+                .andExpect(content().string(containsString("2 restore records refer to this backup and are deleted with it")))
                 .andExpect(content().string(containsString(ARTIFACT_FILE_NAME)))
                 .andExpect(content().string(containsString(ARTIFACT_DIRECTORY)));
     }
@@ -352,7 +351,7 @@ class BackupExecutionControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(view().name("execution/delete-many"))
                 .andExpect(content().string(containsString("Delete these 2 backups?")))
-                .andExpect(content().string(containsString("1 artifact, <span>8192</span> bytes, is deleted from storage")))
+                .andExpect(content().string(containsString("1 artifact, 8192 bytes, is deleted from storage")))
                 .andExpect(content().string(containsString("restore records refer to them and are deleted with them")))
                 .andExpect(content().string(containsString("shop_20260909_100000.sql.gz")))
                 // Carried to the POST, which is what deletes.

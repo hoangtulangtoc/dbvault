@@ -6,6 +6,7 @@ import java.util.NoSuchElementException;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import org.springframework.context.MessageSource;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -33,6 +34,7 @@ import lombok.RequiredArgsConstructor;
 public class RestoreController {
 
     private final RestoreBackupService restoreService;
+    private final MessageSource messages;
     private final RestoreExecutionRepository restores;
     private final BackupExecutionRepository backups;
     private final ManageDatabaseTargetService targets;
@@ -66,19 +68,19 @@ public class RestoreController {
 
         BackupExecution backup = backups.findById(backupExecutionId).orElse(null);
         if (backup == null) {
-            flash.addFlashAttribute("error", "That backup no longer exists");
+            flash.addFlashAttribute("error", ConsoleText.of(messages, "flash.backup.gone"));
             return "redirect:/executions";
         }
         List<DatabaseTarget> all = targets.listAll();
         DatabaseTarget source = byId(all, backup.getTargetId());
         if (source == null) {
-            flash.addFlashAttribute("error", "The target this backup came from no longer exists");
+            flash.addFlashAttribute("error", ConsoleText.of(messages, "flash.restore.sourceGone"));
             return "redirect:/executions/" + backupExecutionId;
         }
         DatabaseTarget requested = byId(all, targetId != null ? targetId : backup.getTargetId());
         if (requested != null && requested.getEngine() != source.getEngine()) {
             flash.addFlashAttribute("error",
-                    "Choose a %s target for this backup".formatted(source.getEngine().displayName()));
+                    ConsoleText.of(messages, "flash.restore.chooseEngine", source.getEngine().displayName()));
             return "redirect:/restores/new?backup=" + backupExecutionId;
         }
         List<DatabaseTarget> compatible = all.stream()
@@ -86,7 +88,7 @@ public class RestoreController {
                 .toList();
         DatabaseTarget destination = byId(compatible, targetId != null ? targetId : backup.getTargetId());
         if (destination == null && targetId != null) {
-            flash.addFlashAttribute("error", "That target no longer exists");
+            flash.addFlashAttribute("error", ConsoleText.of(messages, "flash.target.gone"));
             return "redirect:/restores/new?backup=" + backupExecutionId;
         }
         model.addAttribute("backup", backup);
@@ -105,7 +107,7 @@ public class RestoreController {
 
         BackupExecution backup = backups.findById(backupExecutionId).orElse(null);
         if (backup == null) {
-            flash.addFlashAttribute("error", "That backup no longer exists");
+            flash.addFlashAttribute("error", ConsoleText.of(messages, "flash.backup.gone"));
             return "redirect:/executions";
         }
         UUID destinationId = targetId != null ? targetId : backup.getTargetId();
@@ -117,13 +119,13 @@ public class RestoreController {
         // a choice of targets, that it is the one they meant.
         DatabaseTarget destination = byId(targets.listAll(), destinationId);
         if (destination == null) {
-            flash.addFlashAttribute("error", "The target to restore into no longer exists");
+            flash.addFlashAttribute("error", ConsoleText.of(messages, "flash.restore.targetGone"));
             return "redirect:/restores/new?backup=" + backupExecutionId;
         }
         String expected = destination.getName();
         if (confirmation == null || !expected.equals(confirmation.strip())) {
             flash.addFlashAttribute("error",
-                    "Type the target's name exactly — '%s' — to confirm the overwrite".formatted(expected));
+                    ConsoleText.of(messages, "flash.restore.typeName", expected));
             return back;
         }
 
@@ -144,7 +146,7 @@ public class RestoreController {
     String detail(@PathVariable UUID id, Model model, RedirectAttributes flash) {
         RestoreExecution restore = restores.findById(id).orElse(null);
         if (restore == null) {
-            flash.addFlashAttribute("error", "That restore no longer exists");
+            flash.addFlashAttribute("error", ConsoleText.of(messages, "flash.restore.gone"));
             return "redirect:/restores";
         }
         BackupExecution backup = backups.findById(restore.getBackupExecutionId()).orElse(null);

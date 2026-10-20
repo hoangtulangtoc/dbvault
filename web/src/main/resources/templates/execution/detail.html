@@ -1,120 +1,122 @@
 <!DOCTYPE html>
 <html lang="en" xmlns:th="http://www.thymeleaf.org"
-      th:replace="~{layout/base :: page('Backup', 'backups', ~{:: #content})}">
+      th:replace="~{layout/base :: page(#{backup.title}, 'backups', ~{:: #content})}">
 <body>
 <!-- data-live: while the backup runs, app.js re-fetches this page and swaps
      this block for the new one — see ADR-010. The server renders every state;
      the script only moves markup. -->
 <div id="content" data-live
      th:attr="data-live-active=${execution.status.name() == 'RUNNING' or (latestVerification != null and latestVerification.status.name() == 'RUNNING')},
-              data-live-announce=|Backup ${#strings.toLowerCase(execution.status)}|">
+              data-live-announce=${#messages.msg('backup.announce.' + execution.status.name())},
+              data-live-signed-out=#{live.signedOut},data-live-sign-in-again=#{live.signInAgain},data-live-lost=#{live.lost},data-live-retrying=#{live.retrying}">
 
   <div class="page-header">
     <div>
-      <div class="eyebrow">Backup</div>
-      <h1 th:text="${targetName != null ? targetName : '(removed)'}">production</h1>
+      <div class="eyebrow" th:text="#{backup.title}">Backup</div>
+      <h1 th:text="${targetName != null ? targetName : #messages.msg('backups.removedTarget')}">production</h1>
       <p class="mono"
          th:text="${#temporals.format(
                      execution.startedAt.atOffset(T(java.time.ZoneOffset).UTC),
                      'yyyy-MM-dd HH:mm:ss')} + ' UTC'">…</p>
     </div>
     <div class="actions">
-      <a class="button" th:href="@{/executions}">All backups</a>
+      <a class="button" th:href="@{/executions}" th:text="#{backup.all}">All backups</a>
       <th:block th:if="${execution.status.name() == 'SUCCEEDED' and artifactOnDisk}">
         <form method="post" th:action="@{/executions/{id}/verify(id=${execution.id})}">
-          <button class="button" type="submit" data-busy-label="Verifying…">Verify checksum</button>
+          <button class="button" type="submit" th:attr="data-busy-label=#{backup.verifying}" th:text="#{backup.verify}">Verify checksum</button>
         </form>
         <form method="post" th:action="@{/executions/{id}/test-restore(id=${execution.id})}"
               th:if="${restoreVerificationAvailable and (latestVerification == null or latestVerification.status.name() != 'RUNNING')}">
-          <button class="button" type="submit" data-busy-label="Starting…">Test restore</button>
+          <button class="button" type="submit" th:attr="data-busy-label=#{targets.action.starting}" th:text="#{backup.testRestore}">Test restore</button>
         </form>
-        <a class="button" th:href="@{/executions/{id}/download(id=${execution.id})}">Download</a>
-        <a class="button button-primary" th:href="@{/restores/new(backup=${execution.id})}">Restore this backup</a>
+        <a class="button" th:href="@{/executions/{id}/download(id=${execution.id})}" th:text="#{backups.download}">Download</a>
+        <a class="button button-primary" th:href="@{/restores/new(backup=${execution.id})}" th:text="#{backup.restore}">Restore this backup</a>
       </th:block>
       <a class="button button-danger" th:unless="${execution.status.name() == 'RUNNING'}"
-         th:href="@{/executions/{id}/delete(id=${execution.id})}">Delete</a>
+         th:href="@{/executions/{id}/delete(id=${execution.id})}" th:text="#{backup.delete}">Delete</a>
     </div>
   </div>
 
   <p class="alert alert-info" th:if="${execution.status.name() == 'RUNNING'}">
-    This backup is still running. This page follows it and updates when it finishes.
-    <noscript>With JavaScript off, reload the page to see where it got to.</noscript>
+    <th:block th:text="#{backup.running}">This backup is still running. This page follows it and updates when it finishes.</th:block>
+    <noscript th:text="#{backup.running.noscript}">With JavaScript off, reload the page to see where it got to.</noscript>
   </p>
 
   <!-- The row outlives the file if someone removes it by hand. Said here, and
        the buttons that would need the file are not offered. -->
   <p class="alert alert-danger" role="alert"
-     th:if="${execution.status.name() == 'SUCCEEDED' and !artifactOnDisk}">
+     th:if="${execution.status.name() == 'SUCCEEDED' and !artifactOnDisk}" th:text="#{backup.artifactGone}">
     The artifact is no longer available, so it cannot be verified, downloaded or restored.
     The record can still be deleted.
   </p>
 
   <div class="panel">
     <dl class="detail-grid">
-      <dt>Status</dt>
+      <dt th:text="#{backups.col.status}">Status</dt>
       <dd th:insert="~{fragments/execution-status :: statusBadge(${execution.status})}"></dd>
 
-      <dt>Target</dt>
-      <dd th:text="${targetName != null ? targetName : '(removed)'}">production</dd>
+      <dt th:text="#{backups.col.target}">Target</dt>
+      <dd th:text="${targetName != null ? targetName : #messages.msg('backups.removedTarget')}">production</dd>
 
-      <dt>Engine</dt>
+      <dt th:text="#{targets.col.engine}">Engine</dt>
       <dd><span class="badge badge-neutral" th:text="${targetEngine != null ? targetEngine.displayName : '—'}">MySQL</span></dd>
 
-      <dt>Started</dt>
+      <dt th:text="#{backups.col.started}">Started</dt>
       <dd class="mono"
           th:text="${#temporals.format(
                       execution.startedAt.atOffset(T(java.time.ZoneOffset).UTC),
                       'yyyy-MM-dd HH:mm:ss')} + ' UTC'">…</dd>
 
-      <dt>Finished</dt>
+      <dt th:text="#{backup.finished}">Finished</dt>
       <dd class="mono" th:if="${execution.finishedAt == null}">—</dd>
       <dd class="mono" th:unless="${execution.finishedAt == null}"
           th:text="${#temporals.format(
                       execution.finishedAt.atOffset(T(java.time.ZoneOffset).UTC),
                       'yyyy-MM-dd HH:mm:ss')} + ' UTC'">…</dd>
 
-      <dt>Artifact</dt>
+      <dt th:text="#{backup.artifact}">Artifact</dt>
       <dd th:replace="~{fragments/artifact-path :: artifactPath(${execution.artifactPath})}">—</dd>
 
-      <dt>Destination</dt>
+      <dt th:text="#{targets.col.destination}">Destination</dt>
       <dd th:text="${storageProfileName}">Local filesystem</dd>
 
-      <dt>Size</dt>
-      <dd class="mono" th:text="${byteSizes.readable(execution.sizeBytes)}" th:title="${execution.sizeBytes != null ? execution.sizeBytes + ' bytes' : null}">—</dd>
+      <dt th:text="#{backups.col.size}">Size</dt>
+      <dd class="mono" th:text="${byteSizes.readable(execution.sizeBytes)}" th:title="${execution.sizeBytes != null ? #messages.msg('backup.bytes', execution.sizeBytes) : null}">—</dd>
 
       <!-- Of the file as stored, still gzipped: the same value sha256sum
            prints for the download. See ADR-013. -->
       <dt>SHA-256</dt>
       <dd class="mono break" th:if="${execution.sha256 != null}" th:text="${execution.sha256}">…</dd>
       <dd th:if="${execution.sha256 == null and execution.status.name() == 'SUCCEEDED'}">
-        <span class="badge badge-neutral">Not recorded</span>
-        <span class="field-hint">made before checksums were kept</span>
+        <span class="badge badge-neutral" th:text="#{backup.sha.none}">Not recorded</span>
+        <span class="field-hint" th:text="#{backup.sha.none.hint}">made before checksums were kept</span>
       </dd>
       <dd class="mono" th:if="${execution.status.name() != 'SUCCEEDED'}">—</dd>
     </dl>
   </div>
 
   <div th:if="${execution.errorMessage != null}">
-    <div class="section-heading"><h2>Why it failed</h2></div>
+    <div class="section-heading"><h2 th:text="#{backup.whyFailed}">Why it failed</h2></div>
     <!-- The engine client's own output, in full. Summarising it here would remove the
          one thing that says which knob to turn. -->
     <pre class="error-output" th:text="${execution.errorMessage}"></pre>
   </div>
 
   <div th:if="${execution.status.name() == 'SUCCEEDED'}">
-    <div class="section-heading"><h2>Restore verification</h2></div>
+    <div class="section-heading"><h2 th:text="#{backup.verification}">Restore verification</h2></div>
     <p class="alert alert-info" th:if="${!restoreVerificationEnabled}">
-      Restore verification is disabled for this deployment. Set <code>DBVAULT_VERIFICATION_ENABLED=true</code> to opt in.
+      <th:block th:text="#{backup.verification.disabled}">Restore verification is disabled for this deployment. Set</th:block>
+      <code>DBVAULT_VERIFICATION_ENABLED=true</code> <th:block th:text="#{backup.verification.disabled.after}">to opt in.</th:block>
     </p>
-    <p class="alert alert-info" th:if="${restoreVerificationEnabled and !restoreVerificationSupported}">
+    <p class="alert alert-info" th:if="${restoreVerificationEnabled and !restoreVerificationSupported}" th:text="#{backup.verification.unsupported}">
       Restore verification is not yet supported for this database engine.
     </p>
-    <p class="alert alert-danger" th:if="${restoreVerificationEnabled and restoreVerificationSupported and !restoreVerificationAvailable}">
+    <p class="alert alert-danger" th:if="${restoreVerificationEnabled and restoreVerificationSupported and !restoreVerificationAvailable}" th:text="#{backup.verification.unavailable}">
       Restore verification is enabled but its adapter is unavailable. Check Docker socket access and the deployment logs.
     </p>
-    <p class="empty-state panel" th:if="${verificationHistory.isEmpty()}">This backup has not been restore-verified.</p>
+    <p class="empty-state panel" th:if="${verificationHistory.isEmpty()}" th:text="#{backup.verification.none}">This backup has not been restore-verified.</p>
     <div class="table-wrap" th:unless="${verificationHistory.isEmpty()}">
-      <table><thead><tr><th>Started</th><th>Finished</th><th>Status</th><th>Checked</th><th>Result</th></tr></thead>
+      <table><thead><tr><th th:text="#{backups.col.started}">Started</th><th th:text="#{backup.finished}">Finished</th><th th:text="#{backups.col.status}">Status</th><th th:text="#{backup.checked}">Checked</th><th th:text="#{backup.result}">Result</th></tr></thead>
         <tbody><tr th:each="verification : ${verificationHistory}">
           <td class="mono" th:text="${#temporals.format(verification.startedAt.atOffset(T(java.time.ZoneOffset).UTC), 'yyyy-MM-dd HH:mm:ss')} + ' UTC'">…</td>
           <td class="mono" th:text="${verification.finishedAt == null ? '—' : #temporals.format(verification.finishedAt.atOffset(T(java.time.ZoneOffset).UTC), 'yyyy-MM-dd HH:mm:ss') + ' UTC'}">…</td>
@@ -123,7 +125,7 @@
           <td>
             <span th:if="${verification.resultSummary != null}" th:text="${verification.resultSummary}">Restored</span>
             <span th:if="${verification.errorMessage != null}" class="text-danger" th:text="${verification.errorMessage}">Failed</span>
-            <span th:if="${verification.status.name() == 'RUNNING'}">Temporary database is being restored and checked…</span>
+            <span th:if="${verification.status.name() == 'RUNNING'}" th:text="#{backup.verification.running}">Temporary database is being restored and checked…</span>
           </td>
         </tr></tbody>
       </table>

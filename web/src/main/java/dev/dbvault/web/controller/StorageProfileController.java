@@ -3,6 +3,7 @@ package dev.dbvault.web.controller;
 import java.util.NoSuchElementException;
 import java.util.UUID;
 
+import org.springframework.context.MessageSource;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.validation.BindingResult;
@@ -29,6 +30,7 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class StorageProfileController {
     private final ManageStorageProfileService service;
+    private final MessageSource messages;
 
     @GetMapping String list(Model model) {
         model.addAttribute("profiles", service.listAll());
@@ -49,7 +51,7 @@ public class StorageProfileController {
         }
         try {
             StorageProfile saved = service.create(form.toCommand());
-            flash.addFlashAttribute("message", "Created storage profile '" + saved.getName() + "'");
+            flash.addFlashAttribute("message", ConsoleText.of(messages, "flash.storage.created", saved.getName()));
             return "redirect:/storage";
         } catch (DuplicateStorageProfileNameException e) {
             binding.rejectValue("name", "storage.duplicate", e.getMessage());
@@ -67,7 +69,7 @@ public class StorageProfileController {
             model.addAttribute("form", StorageProfileForm.of(profile));
             return form(model, profile);
         } catch (NoSuchElementException e) {
-            flash.addFlashAttribute("error", "That storage profile no longer exists");
+            flash.addFlashAttribute("error", ConsoleText.of(messages, "flash.storage.gone"));
             return "redirect:/storage";
         }
     }
@@ -81,7 +83,7 @@ public class StorageProfileController {
         if (!binding.hasErrors()) {
             try {
                 service.edit(id, form.toCommand());
-                flash.addFlashAttribute("message", "Saved storage profile '" + form.getName() + "'");
+                flash.addFlashAttribute("message", ConsoleText.of(messages, "flash.storage.saved", form.getName()));
                 return "redirect:/storage";
             } catch (DuplicateStorageProfileNameException e) {
                 binding.rejectValue("name", "storage.duplicate", e.getMessage());
@@ -97,10 +99,10 @@ public class StorageProfileController {
     @PostMapping("/{id}/test") String test(@PathVariable UUID id, RedirectAttributes flash) {
         try {
             ConnectionCheck check = service.test(id);
-            if (check.successful()) flash.addFlashAttribute("message", "Storage connection succeeded");
-            else flash.addFlashAttribute("error", "Storage connection failed: " + check.message());
+            if (check.successful()) flash.addFlashAttribute("message", ConsoleText.of(messages, "flash.storage.checkOk"));
+            else flash.addFlashAttribute("error", ConsoleText.of(messages, "flash.storage.checkFailed", check.message()));
         } catch (NoSuchElementException e) {
-            flash.addFlashAttribute("error", "That storage profile no longer exists");
+            flash.addFlashAttribute("error", ConsoleText.of(messages, "flash.storage.gone"));
         }
         return "redirect:/storage";
     }
@@ -108,7 +110,7 @@ public class StorageProfileController {
     @PostMapping("/{id}/delete") String delete(@PathVariable UUID id, RedirectAttributes flash) {
         try {
             service.delete(id);
-            flash.addFlashAttribute("message", "Storage profile removed");
+            flash.addFlashAttribute("message", ConsoleText.of(messages, "flash.storage.removed"));
         } catch (StorageProfileInUseException e) {
             flash.addFlashAttribute("error", e.getMessage());
         }
