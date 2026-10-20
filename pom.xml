@@ -32,7 +32,7 @@
     <!-- Mockito 5's inline mock maker must start as an agent on JDK 21.
          Self-attachment is disabled by several supported JDK distributions. -->
     <argLine>-javaagent:${settings.localRepository}/org/mockito/mockito-core/${mockito.version}/mockito-core-${mockito.version}.jar</argLine>
-    <aws.sdk.version>2.54.20</aws.sdk.version>
+    <aws.sdk.version>2.56.0</aws.sdk.version>
   </properties>
 
   <dependencyManagement>
