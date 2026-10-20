@@ -33,8 +33,13 @@ class MongoBackupRestoreIT {
     private static final Path MONGODUMP = Path.of("/usr/bin/mongodump");
     private static final Path MONGORESTORE = Path.of("/usr/bin/mongorestore");
 
+    // mongo:8.0.32, pinned by digest like every other image (OPS-13); Testcontainers takes a
+    // digest or a tag, not both. 8.0.34, the next mongo:8.0, exits on the CI runners during
+    // startup; move on only with a run that shows a later one stays up.
+    static final String IMAGE = "mongo@sha256:4968f22d0c6c10ef29952f3e807f62872ba22b3312f25803564fbfc08255efc2";
+
     @Container
-    static final GenericContainer<?> MONGO = new GenericContainer<>("mongo:8.0")
+    static final GenericContainer<?> MONGO = new GenericContainer<>(IMAGE)
             .withEnv("MONGO_INITDB_ROOT_USERNAME", USERNAME)
             .withEnv("MONGO_INITDB_ROOT_PASSWORD", PASSWORD)
             .withExposedPorts(27017);
@@ -99,7 +104,10 @@ class MongoBackupRestoreIT {
             Thread.sleep(250);
         } while (System.nanoTime() < deadline);
 
-        assertThat(stablyReady).as(lastProblem).isTrue();
+        // The container's own output says why, when the server never came up or went away.
+        String problem = lastProblem;
+        assertThat(stablyReady).as(() -> problem + "\n--- container log ---\n"
+                + (MONGO.isRunning() ? MONGO.getLogs() : "(container not running)")).isTrue();
     }
 
     @BeforeEach
@@ -153,7 +161,7 @@ class MongoBackupRestoreIT {
         DockerVerificationSupport docker = dockerSupport();
 
         var result = new MongoRestoreVerificationAdapter(
-                docker, true, "mongo:8.0", Duration.ofMinutes(2))
+                docker, true, IMAGE, Duration.ofMinutes(2))
                 .verify(verificationId, sourceTarget(), artifact);
 
         assertThat(result.checkedObjects()).isEqualTo(1);
@@ -169,7 +177,7 @@ class MongoBackupRestoreIT {
             throw new AssertionError(e);
         }
         assertThatThrownBy(() -> new MongoRestoreVerificationAdapter(
-                docker, true, "mongo:8.0", Duration.ofMinutes(2))
+                docker, true, IMAGE, Duration.ofMinutes(2))
                 .verify(corruptId, sourceTarget(), corrupt))
                 .hasMessageContaining("mongorestore failed");
         assertThat(docker.success(List.of("docker", "inspect",
