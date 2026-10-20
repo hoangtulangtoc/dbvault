@@ -1,13 +1,13 @@
 <!DOCTYPE html>
 <html lang="en" xmlns:th="http://www.thymeleaf.org"
-      th:replace="~{layout/base :: page(${editing == null ? 'Add schedule' : 'Edit schedule'}, 'schedules', ~{:: #content})}">
+      th:replace="~{layout/base :: page(${editing == null ? #messages.msg('schedules.add') : #messages.msg('scheduleForm.edit.title')}, 'schedules', ~{:: #content})}">
 <body>
 <div id="content">
   <div class="page-header">
     <div>
-      <div class="eyebrow">Automation</div>
-      <h1 th:text="${editing == null ? 'Add backup schedule' : 'Edit backup schedule'}">Add backup schedule</h1>
-      <p>Quartz cron uses seconds as its first field. A missed run while the application is stopped is not replayed.</p>
+      <div class="eyebrow" th:text="#{common.automation}">Automation</div>
+      <h1 th:text="${editing == null ? #messages.msg('scheduleForm.add.heading') : #messages.msg('scheduleForm.edit.heading')}">Add backup schedule</h1>
+      <p th:text="#{scheduleForm.intro}">Quartz cron uses seconds as its first field. A missed run while the application is stopped is not replayed.</p>
     </div>
   </div>
 
@@ -17,17 +17,17 @@
 
     <div class="form-grid">
       <div class="form-group">
-        <label for="name">Name</label>
+        <label for="name" th:text="#{targets.col.name}">Name</label>
         <input id="name" type="text" th:field="*{name}" maxlength="100" autofocus
                th:classappend="${#fields.hasErrors('name')} ? 'input-error'">
         <div th:replace="~{fragments/field-error :: fieldError('name')}"></div>
       </div>
 
       <div class="form-group">
-        <label for="targetId">Target</label>
+        <label for="targetId" th:text="#{backups.col.target}">Target</label>
         <select id="targetId" th:field="*{targetId}"
                 th:classappend="${#fields.hasErrors('targetId')} ? 'input-error'">
-          <option value="">Choose a target</option>
+          <option value="" th:text="#{scheduleForm.chooseTarget}">Choose a target</option>
           <option th:each="target : ${targets}" th:value="${target.id}"
                   th:text="|${target.name} · ${target.engine.displayName}|">production · MySQL</option>
         </select>
@@ -35,33 +35,33 @@
       </div>
 
       <div class="form-group">
-        <label for="cronExpression">Quartz cron expression</label>
+        <label for="cronExpression" th:text="#{scheduleForm.cron}">Quartz cron expression</label>
         <input id="cronExpression" class="mono" type="text" th:field="*{cronExpression}" maxlength="120"
                aria-describedby="cron-help"
                th:classappend="${#fields.hasErrors('cronExpression')} ? 'input-error'">
-        <p class="field-hint" id="cron-help"><span class="mono">0 0 2 * * ?</span> means every day at 02:00:00.</p>
+        <p class="field-hint" id="cron-help"><span class="mono">0 0 2 * * ?</span> <th:block th:text="#{scheduleForm.cron.hint}">means every day at 02:00:00.</th:block></p>
         <div th:replace="~{fragments/field-error :: fieldError('cronExpression')}"></div>
       </div>
 
       <div class="form-group">
-        <label for="zoneId">Time zone</label>
+        <label for="zoneId" th:text="#{scheduleForm.zone}">Time zone</label>
         <input id="zoneId" class="mono" type="text" th:field="*{zoneId}" maxlength="64"
                aria-describedby="zone-help"
                th:classappend="${#fields.hasErrors('zoneId')} ? 'input-error'">
-        <p class="field-hint" id="zone-help">An IANA zone such as <span class="mono">UTC</span> or <span class="mono">Asia/Ho_Chi_Minh</span>.</p>
+        <p class="field-hint" id="zone-help"><th:block th:text="#{scheduleForm.zone.hint}">An IANA zone such as</th:block> <span class="mono">UTC</span> <th:block th:text="#{scheduleForm.zone.or}">or</th:block> <span class="mono">Asia/Ho_Chi_Minh</span>.</p>
         <div th:replace="~{fragments/field-error :: fieldError('zoneId')}"></div>
       </div>
     </div>
 
     <div class="form-group checkbox-row">
       <input id="enabled" type="checkbox" th:field="*{enabled}">
-      <label for="enabled">Enabled</label>
+      <label for="enabled" th:text="#{schedules.enabled}">Enabled</label>
     </div>
 
     <div class="form-actions">
-      <button class="button button-primary" type="submit" data-busy-label="Saving…"
-              th:text="${editing == null ? 'Create schedule' : 'Save changes'}">Create schedule</button>
-      <a class="button button-ghost" th:href="@{/schedules}">Cancel</a>
+      <button class="button button-primary" type="submit" th:attr="data-busy-label=#{targetForm.saving}"
+              th:text="${editing == null ? #messages.msg('scheduleForm.create') : #messages.msg('targetForm.save')}">Create schedule</button>
+      <a class="button button-ghost" th:href="@{/schedules}" th:text="#{common.cancel}">Cancel</a>
     </div>
   </form>
 </div>

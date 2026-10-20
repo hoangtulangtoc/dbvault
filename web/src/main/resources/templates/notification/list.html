@@ -1,36 +1,36 @@
 <!DOCTYPE html>
 <html lang="en" xmlns:th="http://www.thymeleaf.org"
-      th:replace="~{layout/base :: page('Notifications', 'notifications', ~{:: #content})}">
+      th:replace="~{layout/base :: page(#{nav.notifications}, 'notifications', ~{:: #content})}">
 <body><div id="content">
-  <div class="page-header"><div><div class="eyebrow">Setup</div><h1>Notification channels</h1>
-    <p>Reusable destinations for backup and restore events.</p></div>
+  <div class="page-header"><div><div class="eyebrow" th:text="#{nav.setup}">Setup</div><h1 th:text="#{channels.heading}">Notification channels</h1>
+    <p th:text="#{channels.intro}">Reusable destinations for backup and restore events.</p></div>
     <div class="actions">
-      <a class="button" th:href="@{/notifications/new(type='SLACK')}">Add Slack</a>
-      <a class="button" th:href="@{/notifications/new(type='EMAIL')}">Add Email</a>
-      <a class="button button-primary" th:href="@{/notifications/new(type='WEBHOOK')}">Add Webhook</a>
+      <a class="button" th:href="@{/notifications/new(type='SLACK')}" th:text="#{channels.addSlack}">Add Slack</a>
+      <a class="button" th:href="@{/notifications/new(type='EMAIL')}" th:text="#{channels.addEmail}">Add Email</a>
+      <a class="button button-primary" th:href="@{/notifications/new(type='WEBHOOK')}" th:text="#{channels.addWebhook}">Add Webhook</a>
     </div></div>
 
-  <p class="empty-state panel" th:if="${channels.isEmpty()}">No notification channels yet.</p>
+  <p class="empty-state panel" th:if="${channels.isEmpty()}" th:text="#{channels.empty}">No notification channels yet.</p>
   <div class="table-wrap" th:unless="${channels.isEmpty()}"><table><thead><tr>
-    <th>Name</th><th>Type</th><th>Destination</th><th>Last test</th><th></th>
+    <th th:text="#{targets.col.name}">Name</th><th th:text="#{channels.col.type}">Type</th><th th:text="#{targets.col.destination}">Destination</th><th th:text="#{storage.col.lastTest}">Last test</th><th></th>
   </tr></thead><tbody><tr th:each="channel : ${channels}">
     <td><strong th:text="${channel.name}">Operations</strong></td>
     <td th:text="${channel.type.displayName}">Webhook</td>
     <td>
       <span th:if="${channel.type.name() == 'EMAIL'}" th:text="${channel.emailTo}">ops@example.com</span>
-      <span th:if="${channel.type.name() == 'SLACK'}">Encrypted Slack webhook</span>
-      <span th:if="${channel.type.name() == 'WEBHOOK'}">Encrypted webhook URL</span>
+      <span th:if="${channel.type.name() == 'SLACK'}" th:text="#{channels.slackHidden}">Encrypted Slack webhook</span>
+      <span th:if="${channel.type.name() == 'WEBHOOK'}" th:text="#{channels.webhookHidden}">Encrypted webhook URL</span>
     </td>
-    <td><span class="badge badge-neutral" th:if="${channel.lastConnectionCheck == null}">Never tested</span>
-      <span class="badge badge-success" th:if="${channel.lastConnectionCheck != null and channel.lastConnectionCheck.successful}">Passed</span>
+    <td><span class="badge badge-neutral" th:if="${channel.lastConnectionCheck == null}" th:text="#{targets.check.never}">Never tested</span>
+      <span class="badge badge-success" th:if="${channel.lastConnectionCheck != null and channel.lastConnectionCheck.successful}" th:text="#{storage.passed}">Passed</span>
       <span class="badge badge-danger" th:if="${channel.lastConnectionCheck != null and !channel.lastConnectionCheck.successful}"
-            th:title="${channel.lastConnectionCheck.message}">Failed</span></td>
+            th:title="${channel.lastConnectionCheck.message}" th:text="#{status.FAILED}">Failed</span></td>
     <td class="actions"><div class="row-actions">
-      <form method="post" th:action="@{/notifications/{id}/test(id=${channel.id})}"><button class="button button-small" type="submit" data-busy-label="Sending…">Send test</button></form>
-      <a class="button button-small" th:href="@{/notifications/{id}/edit(id=${channel.id})}">Edit</a>
+      <form method="post" th:action="@{/notifications/{id}/test(id=${channel.id})}"><button class="button button-small" type="submit" th:attr="data-busy-label=#{channels.sending}" th:text="#{channels.sendTest}">Send test</button></form>
+      <a class="button button-small" th:href="@{/notifications/{id}/edit(id=${channel.id})}" th:text="#{targets.action.edit}">Edit</a>
       <form method="post" th:action="@{/notifications/{id}/delete(id=${channel.id})}"
-            th:attr="data-confirm=|Remove notification channel “${channel.name}”?|" data-confirm-title="Remove channel" data-confirm-accept="Remove">
-        <button class="button button-small button-danger" type="submit">Remove</button></form>
+            th:attr="data-confirm=#{channels.remove.confirm(${channel.name})},data-confirm-title=#{channels.remove.title},data-confirm-accept=#{targets.action.remove}">
+        <button class="button button-small button-danger" type="submit" th:text="#{targets.action.remove}">Remove</button></form>
     </div></td>
   </tr></tbody></table></div>
 </div></body></html>

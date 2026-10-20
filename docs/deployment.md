@@ -15,7 +15,9 @@ distinction is load-bearing: MariaDB's `mysqldump` rejects
 `--set-gtid-purged`, which this tool always passes, so every MySQL backup would
 fail. The PostgreSQL package supplies `psql`, `pg_dump` and `pg_restore`; the
 MongoDB package supplies `mongodump` and `mongorestore`. Anyone changing the
-base image must check all seven binaries again. The libraries inside the jar and
+base image must check all seven binaries again. Every image the Dockerfile and
+`docker-compose.yml` use is pinned by digest, and Dependabot proposes the next
+one each week, so an image changes only through a reviewed pull request. The libraries inside the jar and
 their licences are listed in the jar itself; see [licences.md](licences.md).
 
 It runs as an unprivileged user, `dbvault` (uid 10001), and its healthcheck
@@ -139,7 +141,8 @@ checked — except for MongoDB, whose tools check it against the image's CA stor
 **The console speaks English or Vietnamese.** Each browser picks: the sidebar
 and the sign-in page link to both, `?lang=vi` on any page does the same, and the
 choice is kept in a cookie; without one the browser's language decides. The API,
-logs and notifications stay English. Not every page is translated yet
+logs and notifications stay English, and so does the reason a domain rule or a
+database client gives for refusing something
 ([ADR-042](adr/042-console-language-per-browser.md)).
 
 **Metadata PostgreSQL is not a target.** The `postgres` service in compose holds

@@ -1,14 +1,14 @@
 <!DOCTYPE html>
 <html lang="en" xmlns:th="http://www.thymeleaf.org"
-      th:replace="~{layout/base :: page('Delete backups', 'backups', ~{:: #content})}">
+      th:replace="~{layout/base :: page(#{backupDeleteMany.title}, 'backups', ~{:: #content})}">
 <body>
 <div id="content" th:with="count=${preview.executions().size()}">
 
   <div class="page-header">
     <div>
-      <div class="eyebrow">Backup</div>
-      <h1 th:text="${count == 1 ? 'Delete this backup?' : 'Delete these ' + count + ' backups?'}">Delete these 3 backups?</h1>
-      <p>Check what goes with them before you confirm.</p>
+      <div class="eyebrow" th:text="#{backup.title}">Backup</div>
+      <h1 th:text="${count == 1 ? #messages.msg('backupDelete.heading') : #messages.msg('backupDeleteMany.heading', count)}">Delete these 3 backups?</h1>
+      <p th:text="#{backupDeleteMany.intro}">Check what goes with them before you confirm.</p>
     </div>
   </div>
 
@@ -16,24 +16,22 @@
        while one of them is still in use. -->
   <div class="alert alert-warning" role="alert" th:if="${preview.refused()}">
     <p><strong th:text="${preview.refusal()}">One of these backups is still running.</strong></p>
-    <p>Nothing has been deleted. Go back and leave it out, or wait and try again.</p>
+    <p th:text="#{backupDeleteMany.refused}">Nothing has been deleted. Go back and leave it out, or wait and try again.</p>
   </div>
 
   <div class="alert alert-danger" role="alert" th:unless="${preview.refused()}">
     <p th:if="${preview.artifactsOnDisk() == 1}">
-      <strong>1 artifact, <span th:text="${preview.bytesOnDisk()}">8192</span> bytes, is deleted from storage. There is no undo.</strong>
+      <strong th:text="#{backupDeleteMany.artifacts.one(${preview.bytesOnDisk()})}">1 artifact, 8192 bytes, is deleted from storage. There is no undo.</strong>
     </p>
     <p th:if="${preview.artifactsOnDisk() > 1}">
-      <strong><span th:text="${preview.artifactsOnDisk()}">3</span> artifacts,
-        <span th:text="${preview.bytesOnDisk()}">24576</span> bytes in all, are deleted from storage. There is no undo.</strong>
+      <strong th:text="#{backupDeleteMany.artifacts.many(${preview.artifactsOnDisk()}, ${preview.bytesOnDisk()})}">3 artifacts, 24576 bytes in all, are deleted from storage. There is no undo.</strong>
     </p>
-    <p th:if="${preview.artifactsOnDisk() == 0}"><strong>There is no undo.</strong></p>
-    <p th:if="${preview.restoreCount() == 1}">
+    <p th:if="${preview.artifactsOnDisk() == 0}"><strong th:text="#{common.noUndo}">There is no undo.</strong></p>
+    <p th:if="${preview.restoreCount() == 1}" th:text="#{backupDeleteMany.restores.one}">
       1 restore record refers to one of them and is deleted with it.
     </p>
-    <p th:if="${preview.restoreCount() > 1}">
-      <span th:text="${preview.restoreCount()}">2</span>
-      restore records refer to them and are deleted with them.
+    <p th:if="${preview.restoreCount() > 1}" th:text="#{backupDeleteMany.restores.many(${preview.restoreCount()})}">
+      2 restore records refer to them and are deleted with them.
     </p>
   </div>
 
@@ -41,27 +39,27 @@
     <table>
       <thead>
         <tr>
-          <th scope="col">Started</th>
-          <th scope="col">Target</th>
-          <th scope="col">Status</th>
-          <th scope="col">Artifact</th>
-          <th scope="col">Size</th>
+          <th scope="col" th:text="#{backups.col.started}">Started</th>
+          <th scope="col" th:text="#{backups.col.target}">Target</th>
+          <th scope="col" th:text="#{backups.col.status}">Status</th>
+          <th scope="col" th:text="#{backup.artifact}">Artifact</th>
+          <th scope="col" th:text="#{backups.col.size}">Size</th>
         </tr>
       </thead>
       <tbody>
         <tr th:each="execution : ${preview.executions()}">
-          <td data-label="Started" class="mono"
+          <td th:attr="data-label=#{backups.col.started}" class="mono"
               th:text="${#temporals.format(
                           execution.startedAt.atOffset(T(java.time.ZoneOffset).UTC),
                           'yyyy-MM-dd HH:mm:ss')} + ' UTC'">…</td>
-          <td data-label="Target" th:text="${targetNames.getOrDefault(execution.targetId, '(removed)')}">production</td>
-          <td data-label="Status" th:insert="~{fragments/execution-status :: statusBadge(${execution.status})}"></td>
+          <td th:attr="data-label=#{backups.col.target}" th:text="${targetNames.getOrDefault(execution.targetId, #messages.msg('backups.removedTarget'))}">production</td>
+          <td th:attr="data-label=#{backups.col.status}" th:insert="~{fragments/execution-status :: statusBadge(${execution.status})}"></td>
           <!-- The file name alone: the fragment that adds the directory is a
                <dd>, and every file here is in the same one. -->
-          <td data-label="Artifact" class="mono break"
+          <td th:attr="data-label=#{backup.artifact}" class="mono break"
               th:text="${execution.artifactPath == null ? '—'
                         : execution.artifactPath.substring(execution.artifactPath.lastIndexOf('/') + 1)}">shop_20260909_100000.sql.gz</td>
-          <td data-label="Size" class="mono" th:text="${byteSizes.readable(execution.sizeBytes)}">—</td>
+          <td th:attr="data-label=#{backups.col.size}" class="mono" th:text="${byteSizes.readable(execution.sizeBytes)}">—</td>
         </tr>
       </tbody>
     </table>
@@ -70,10 +68,10 @@
   <form method="post" th:action="@{/executions/delete}">
     <input type="hidden" name="id" th:each="execution : ${preview.executions()}" th:value="${execution.id}">
     <div class="form-actions">
-      <button class="button button-danger-solid" type="submit" data-busy-label="Deleting…"
+      <button class="button button-danger-solid" type="submit" th:attr="data-busy-label=#{backupDelete.deleting}"
               th:unless="${preview.refused()}"
-              th:text="${count == 1 ? 'Delete this backup' : 'Delete these ' + count + ' backups'}">Delete these 3 backups</button>
-      <a class="button button-ghost" th:href="@{/executions}">Cancel</a>
+              th:text="${count == 1 ? #messages.msg('backupDelete.submit') : #messages.msg('backupDeleteMany.submit', count)}">Delete these 3 backups</button>
+      <a class="button button-ghost" th:href="@{/executions}" th:text="#{common.cancel}">Cancel</a>
     </div>
   </form>
 

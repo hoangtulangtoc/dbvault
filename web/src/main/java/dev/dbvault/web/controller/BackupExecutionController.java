@@ -7,6 +7,7 @@ import java.util.NoSuchElementException;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import org.springframework.context.MessageSource;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
@@ -42,6 +43,7 @@ import lombok.RequiredArgsConstructor;
 public class BackupExecutionController {
 
     private final BackupExecutionRepository executions;
+    private final MessageSource messages;
     private final ManageDatabaseTargetService targets;
     private final BackupArtifactService artifacts;
     private final ManageStorageProfileService storageProfiles;
@@ -79,7 +81,7 @@ public class BackupExecutionController {
         model.addAttribute("restoreVerificationAvailable",
                 target != null && restoreVerification.isAvailable(target.getEngine()));
         model.addAttribute("storageProfileName", execution.getStorageProfileId() == null
-                ? "Local filesystem"
+                ? ConsoleText.of(messages, "targets.localFilesystem")
                 : storageProfiles.get(execution.getStorageProfileId()).getName());
         return "execution/detail";
     }
@@ -94,15 +96,12 @@ public class BackupExecutionController {
         BackupArtifactService.Verification result = artifacts.verify(id);
         switch (result.integrity()) {
             case INTACT -> flash.addFlashAttribute("message",
-                    "Verified: the artifact matches the checksum recorded when it was made");
+                    ConsoleText.of(messages, "flash.backup.verified"));
             case MISMATCH -> flash.addFlashAttribute("error",
-                    "The artifact does not match its checksum — recorded %s, now %s. It has changed since it "
-                            .formatted(result.recorded(), result.actual())
-                            + "was written, and a restore from it will be refused.");
-            case MISSING -> flash.addFlashAttribute("error", "The artifact is no longer available");
+                    ConsoleText.of(messages, "flash.backup.mismatch", result.recorded(), result.actual()));
+            case MISSING -> flash.addFlashAttribute("error", ConsoleText.of(messages, "flash.backup.artifactGone"));
             case NOT_RECORDED -> flash.addFlashAttribute("message",
-                    "This backup predates checksums, so there is nothing to compare with. Its SHA-256 now is "
-                            + result.actual());
+                    ConsoleText.of(messages, "flash.backup.notRecorded", result.actual()));
         }
         return "redirect:/executions/" + id;
     }
@@ -111,9 +110,9 @@ public class BackupExecutionController {
     String testRestore(@PathVariable UUID id, RedirectAttributes flash) {
         try {
             restoreVerification.start(id);
-            flash.addFlashAttribute("message", "Restore verification started");
+            flash.addFlashAttribute("message", ConsoleText.of(messages, "flash.backup.verificationStarted"));
         } catch (NoSuchElementException e) {
-            flash.addFlashAttribute("error", "That backup no longer exists");
+            flash.addFlashAttribute("error", ConsoleText.of(messages, "flash.backup.gone"));
         } catch (IllegalStateException e) {
             flash.addFlashAttribute("error", e.getMessage());
         }
@@ -152,12 +151,12 @@ public class BackupExecutionController {
             RedirectAttributes flash) {
 
         if (ids == null || ids.isEmpty()) {
-            flash.addFlashAttribute("error", "Tick the backups to delete first");
+            flash.addFlashAttribute("error", ConsoleText.of(messages, "flash.backup.tickFirst"));
             return "redirect:/executions";
         }
         BackupArtifactService.BulkDeletionPreview preview = artifacts.previewDeletions(ids);
         if (preview.executions().isEmpty()) {
-            flash.addFlashAttribute("error", "Those backups no longer exist");
+            flash.addFlashAttribute("error", ConsoleText.of(messages, "flash.backup.goneMany"));
             return "redirect:/executions";
         }
         model.addAttribute("preview", preview);
@@ -171,7 +170,7 @@ public class BackupExecutionController {
             RedirectAttributes flash) {
 
         if (ids == null || ids.isEmpty()) {
-            flash.addFlashAttribute("error", "Tick the backups to delete first");
+            flash.addFlashAttribute("error", ConsoleText.of(messages, "flash.backup.tickFirst"));
             return "redirect:/executions";
         }
         try {
@@ -195,12 +194,12 @@ public class BackupExecutionController {
         try {
             boolean hadArtifact = artifacts.delete(id);
             flash.addFlashAttribute("message", hadArtifact
-                    ? "Backup deleted, along with its artifact"
+                    ? ConsoleText.of(messages, "flash.backup.deleted")
                     // A failed backup never wrote a file; saying one went
                     // with it would be untrue.
-                    : "Backup record deleted — it had no artifact");
+                    : ConsoleText.of(messages, "flash.backup.recordDeleted"));
         } catch (NoSuchElementException e) {
-            flash.addFlashAttribute("error", "That backup no longer exists");
+            flash.addFlashAttribute("error", ConsoleText.of(messages, "flash.backup.gone"));
         } catch (IllegalStateException e) {
             flash.addFlashAttribute("error", e.getMessage());
         }

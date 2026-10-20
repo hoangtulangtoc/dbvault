@@ -14,8 +14,8 @@ import lombok.Setter;
 @NoArgsConstructor
 public class BackupRetentionPolicyForm {
 
-    @NotNull(message = "Enter how many successful backups to keep")
-    @Min(value = 1, message = "Keep successful backups must be at least 1")
+    @NotNull(message = "{validation.keep.required}")
+    @Min(value = 1, message = "{validation.keep.min}")
     private Integer keepSuccessful;
 
     public static BackupRetentionPolicyForm blank() {

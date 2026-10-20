@@ -7,6 +7,7 @@ import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import org.springframework.context.MessageSource;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.validation.BindingResult;
@@ -33,6 +34,7 @@ public class TargetNotificationController {
     private static final NotificationEventType[] EVENTS = java.util.Arrays.stream(NotificationEventType.values())
             .filter(NotificationEventType::isSubscribable).toArray(NotificationEventType[]::new);
     private final ManageTargetNotificationService targetNotifications;
+    private final MessageSource messages;
     private final ManageNotificationChannelService channels;
     private final ManageDatabaseTargetService targets;
 
@@ -42,7 +44,7 @@ public class TargetNotificationController {
             model.addAttribute("form", form);
             return view(targetId, model);
         } catch (NoSuchElementException e) {
-            flash.addFlashAttribute("error", "That target no longer exists");
+            flash.addFlashAttribute("error", ConsoleText.of(messages, "flash.target.gone"));
             return "redirect:/databases";
         }
     }
@@ -60,12 +62,12 @@ public class TargetNotificationController {
         if (!binding.hasErrors()) {
             try {
                 targetNotifications.replace(targetId, form.toSubscriptions());
-                flash.addFlashAttribute("message", "Notification subscriptions saved");
+                flash.addFlashAttribute("message", ConsoleText.of(messages, "flash.subscriptions.saved"));
                 return "redirect:/databases";
             } catch (IllegalArgumentException e) {
                 binding.reject("notification.invalid", e.getMessage());
             } catch (NoSuchElementException e) {
-                flash.addFlashAttribute("error", "That target no longer exists");
+                flash.addFlashAttribute("error", ConsoleText.of(messages, "flash.target.gone"));
                 return "redirect:/databases";
             }
         }

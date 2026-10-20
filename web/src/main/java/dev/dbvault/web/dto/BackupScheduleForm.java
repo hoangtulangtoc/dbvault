@@ -17,19 +17,19 @@ import lombok.Setter;
 @NoArgsConstructor
 public class BackupScheduleForm {
 
-    @NotBlank(message = "Name is required")
-    @Size(max = BackupSchedule.MAX_NAME_LENGTH, message = "Name must be at most 100 characters")
+    @NotBlank(message = "{validation.name.required}")
+    @Size(max = BackupSchedule.MAX_NAME_LENGTH, message = "{validation.name.size}")
     private String name;
 
-    @NotNull(message = "Choose a target")
+    @NotNull(message = "{validation.target.required}")
     private UUID targetId;
 
-    @NotBlank(message = "Cron expression is required")
-    @Size(max = BackupSchedule.MAX_CRON_LENGTH, message = "Cron expression must be at most 120 characters")
+    @NotBlank(message = "{validation.cron.required}")
+    @Size(max = BackupSchedule.MAX_CRON_LENGTH, message = "{validation.cron.size}")
     private String cronExpression;
 
-    @NotBlank(message = "Time zone is required")
-    @Size(max = BackupSchedule.MAX_ZONE_LENGTH, message = "Time zone must be at most 64 characters")
+    @NotBlank(message = "{validation.zone.required}")
+    @Size(max = BackupSchedule.MAX_ZONE_LENGTH, message = "{validation.zone.size}")
     private String zoneId;
 
     private boolean enabled = true;

@@ -23,34 +23,34 @@ import lombok.Data;
 @Data
 public class DatabaseTargetForm {
 
-    @NotBlank(message = "Name is required")
-    @Size(max = 100, message = "Name must be at most 100 characters")
+    @NotBlank(message = "{validation.name.required}")
+    @Size(max = 100, message = "{validation.name.size}")
     private String name;
 
-    @NotNull(message = "Database engine is required")
+    @NotNull(message = "{validation.engine.required}")
     private DatabaseEngine engine;
 
-    @NotBlank(message = "Host is required")
-    @Size(max = 255, message = "Host must be at most 255 characters")
+    @NotBlank(message = "{validation.host.required}")
+    @Size(max = 255, message = "{validation.host.size}")
     private String host;
 
-    @NotNull(message = "Port is required")
-    @Min(value = 1, message = "Port must be between 1 and 65535")
-    @Max(value = 65535, message = "Port must be between 1 and 65535")
+    @NotNull(message = "{validation.port.required}")
+    @Min(value = 1, message = "{validation.port.range}")
+    @Max(value = 65535, message = "{validation.port.range}")
     private Integer port;
 
-    @NotBlank(message = "Database name is required")
-    @Size(max = 64, message = "Database name must be at most 64 characters")
+    @NotBlank(message = "{validation.database.required}")
+    @Size(max = 64, message = "{validation.database.size}")
     private String database;
 
-    @NotBlank(message = "Username is required")
-    @Size(max = 63, message = "Username must be at most 63 characters")
+    @NotBlank(message = "{validation.username.required}")
+    @Size(max = 63, message = "{validation.username.size}")
     private String username;
 
-    @Size(max = 64, message = "Authentication database must be at most 64 characters")
+    @Size(max = 64, message = "{validation.authDatabase.size}")
     private String authenticationDatabase;
 
-    @NotBlank(message = "Password is required")
+    @NotBlank(message = "{validation.password.required}")
     private String password;
     private UUID storageProfileId;
     private boolean verifyAfterBackup;

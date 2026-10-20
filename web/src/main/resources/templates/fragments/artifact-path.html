@@ -17,7 +17,7 @@
     <div class="cell-stack" th:unless="${path == null}">
       <span class="mono break"
             th:text="${path.substring(path.lastIndexOf('/') + 1)}">shop_20260909_100000.sql.gz</span>
-      <span class="field-hint" th:if="${path.lastIndexOf('/') > 0}">in <span class="mono break"
+      <span class="field-hint" th:if="${path.lastIndexOf('/') > 0}"><th:block th:text="#{artifact.in}">in</th:block> <span class="mono break"
             th:text="${path.substring(0, path.lastIndexOf('/'))}">/var/lib/dbvault/backups</span></span>
     </div>
   </dd>

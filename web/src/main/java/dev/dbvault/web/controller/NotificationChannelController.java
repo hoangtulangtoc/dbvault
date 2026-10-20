@@ -3,6 +3,7 @@ package dev.dbvault.web.controller;
 import java.util.NoSuchElementException;
 import java.util.UUID;
 
+import org.springframework.context.MessageSource;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.validation.BindingResult;
@@ -30,6 +31,7 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class NotificationChannelController {
     private final ManageNotificationChannelService service;
+    private final MessageSource messages;
 
     @GetMapping String list(Model model) {
         model.addAttribute("channels", service.listAll());
@@ -47,7 +49,7 @@ public class NotificationChannelController {
         if (!binding.hasErrors()) {
             try {
                 NotificationChannel saved = service.create(form.toCommand());
-                flash.addFlashAttribute("message", "Created notification channel '" + saved.getName() + "'");
+                flash.addFlashAttribute("message", ConsoleText.of(messages, "flash.channel.created", saved.getName()));
                 return "redirect:/notifications";
             } catch (DuplicateNotificationChannelNameException e) {
                 binding.rejectValue("name", "notification.duplicate", e.getMessage());
@@ -65,7 +67,7 @@ public class NotificationChannelController {
             model.addAttribute("form", NotificationChannelForm.of(channel));
             return form(model, channel, channel.getType());
         } catch (NoSuchElementException e) {
-            flash.addFlashAttribute("error", "That notification channel no longer exists");
+            flash.addFlashAttribute("error", ConsoleText.of(messages, "flash.channel.gone"));
             return "redirect:/notifications";
         }
     }
@@ -79,7 +81,7 @@ public class NotificationChannelController {
         if (!binding.hasErrors()) {
             try {
                 service.edit(id, form.toCommand());
-                flash.addFlashAttribute("message", "Saved notification channel '" + form.getName() + "'");
+                flash.addFlashAttribute("message", ConsoleText.of(messages, "flash.channel.saved", form.getName()));
                 return "redirect:/notifications";
             } catch (DuplicateNotificationChannelNameException e) {
                 binding.rejectValue("name", "notification.duplicate", e.getMessage());
@@ -94,10 +96,10 @@ public class NotificationChannelController {
     @PostMapping("/{id}/test") String test(@PathVariable UUID id, RedirectAttributes flash) {
         try {
             ConnectionCheck check = service.test(id);
-            if (check.successful()) flash.addFlashAttribute("message", "Test notification sent");
-            else flash.addFlashAttribute("error", "Notification test failed: " + check.message());
+            if (check.successful()) flash.addFlashAttribute("message", ConsoleText.of(messages, "flash.channel.testSent"));
+            else flash.addFlashAttribute("error", ConsoleText.of(messages, "flash.channel.testFailed", check.message()));
         } catch (NoSuchElementException e) {
-            flash.addFlashAttribute("error", "That notification channel no longer exists");
+            flash.addFlashAttribute("error", ConsoleText.of(messages, "flash.channel.gone"));
         }
         return "redirect:/notifications";
     }
@@ -105,7 +107,7 @@ public class NotificationChannelController {
     @PostMapping("/{id}/delete") String delete(@PathVariable UUID id, RedirectAttributes flash) {
         try {
             service.delete(id);
-            flash.addFlashAttribute("message", "Notification channel removed");
+            flash.addFlashAttribute("message", ConsoleText.of(messages, "flash.channel.removed"));
         } catch (NotificationChannelInUseException e) {
             flash.addFlashAttribute("error", e.getMessage());
         }
