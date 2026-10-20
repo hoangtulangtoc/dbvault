@@ -3,8 +3,11 @@
 # Two stages: one that builds the jar, one that runs it. That is the whole
 # reason `docker compose up --build` needs nothing on the host but Docker —
 # no JDK, no Maven. The build stage contributes nothing to the final image.
+#
+# Every base image is pinned by digest, so a rebuild gets the same bytes until
+# Dependabot proposes a new digest (OPS-13).
 
-FROM maven:3.9-eclipse-temurin-21 AS build
+FROM maven:3.9-eclipse-temurin-21@sha256:99e61abcff91a9b1333463bd8451fb18495d6eba9250ac66a338b518f8278320 AS build
 WORKDIR /src
 
 COPY pom.xml .
@@ -18,10 +21,10 @@ COPY web web
 # real machine is the gate, and CI runs it.
 RUN --mount=type=cache,target=/root/.m2 mvn -B -DskipTests package
 
-FROM docker:27.5.1-cli AS docker-cli
+FROM docker:27.5.1-cli@sha256:851f91d241214e7c6db86513b270d58776379aacc5eb9c4a87e5b47115e3065c AS docker-cli
 
 
-FROM eclipse-temurin:21-jre-noble
+FROM eclipse-temurin:21-jre-noble@sha256:35501d3f93173b420ac9001658eb68157e813316b865087e345c187fca422c4c
 
 # The daemon stays on the host. This client is dormant unless restore
 # verification is enabled and the operator explicitly mounts docker.sock.
