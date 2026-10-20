@@ -17,3 +17,20 @@ updates:
     open-pull-requests-limit: 1
     labels:
       - dependencies
+  # The Dockerfile and docker-compose.yml pin images by digest; these propose the next digest.
+  - package-ecosystem: docker
+    directory: /
+    target-branch: develop
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 1
+    labels:
+      - dependencies
+  - package-ecosystem: docker-compose
+    directory: /
+    target-branch: develop
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 1
+    labels:
+      - dependencies
