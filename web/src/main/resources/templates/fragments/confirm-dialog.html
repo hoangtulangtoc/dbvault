@@ -12,11 +12,11 @@
      class="modal-backdrop" id="confirm-dialog" hidden>
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="confirm-dialog-title"
        aria-describedby="confirm-dialog-body" data-confirm-modal>
-    <h2 id="confirm-dialog-title" data-confirm-title>Confirm</h2>
+    <h2 id="confirm-dialog-title" data-confirm-title th:text="#{confirm.title}">Confirm</h2>
     <p id="confirm-dialog-body" data-confirm-body></p>
     <div class="form-actions">
-      <button type="button" class="button" data-confirm-cancel>Go back</button>
-      <button type="button" class="button button-danger-solid" data-confirm-accept>Delete</button>
+      <button type="button" class="button" data-confirm-cancel th:text="#{confirm.back}">Go back</button>
+      <button type="button" class="button button-danger-solid" data-confirm-accept th:text="#{confirm.accept}">Delete</button>
     </div>
   </div>
 </div>

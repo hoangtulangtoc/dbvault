@@ -4,6 +4,7 @@ import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.springframework.context.MessageSource;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.validation.BindingResult;
@@ -31,6 +32,7 @@ public class BackupRetentionController {
     private static final String FORM_VIEW = "retention/form";
 
     private final ManageBackupRetentionService retention;
+    private final MessageSource messages;
 
     @GetMapping
     String list(Model model) {
@@ -72,7 +74,7 @@ public class BackupRetentionController {
         }
         try {
             retention.save(targetId, form.toCommand());
-            flash.addFlashAttribute("message", "Retention enabled for '%s'".formatted(target.getName()));
+            flash.addFlashAttribute("message", ConsoleText.of(messages, "flash.retention.enabled", target.getName()));
             return "redirect:/retention";
         } catch (InvalidRetentionPolicyException e) {
             if ("keepSuccessful".equals(e.getField())) {
@@ -89,9 +91,9 @@ public class BackupRetentionController {
         try {
             DatabaseTarget target = retention.getTarget(targetId);
             retention.disable(targetId);
-            flash.addFlashAttribute("message", "Retention disabled for '%s'".formatted(target.getName()));
+            flash.addFlashAttribute("message", ConsoleText.of(messages, "flash.retention.disabled", target.getName()));
         } catch (NoSuchElementException e) {
-            flash.addFlashAttribute("message", "Target no longer exists");
+            flash.addFlashAttribute("message", ConsoleText.of(messages, "flash.target.gone"));
         }
         return "redirect:/retention";
     }
@@ -102,8 +104,8 @@ public class BackupRetentionController {
         return FORM_VIEW;
     }
 
-    private static String targetGone(RedirectAttributes flash) {
-        flash.addFlashAttribute("error", "That target no longer exists");
+    private String targetGone(RedirectAttributes flash) {
+        flash.addFlashAttribute("error", ConsoleText.of(messages, "flash.target.gone"));
         return "redirect:/retention";
     }
 }

@@ -141,7 +141,8 @@ checked — except for MongoDB, whose tools check it against the image's CA stor
 **The console speaks English or Vietnamese.** Each browser picks: the sidebar
 and the sign-in page link to both, `?lang=vi` on any page does the same, and the
 choice is kept in a cookie; without one the browser's language decides. The API,
-logs and notifications stay English. Not every page is translated yet
+logs and notifications stay English, and so does the reason a domain rule or a
+database client gives for refusing something
 ([ADR-042](adr/042-console-language-per-browser.md)).
 
 **Metadata PostgreSQL is not a target.** The `postgres` service in compose holds

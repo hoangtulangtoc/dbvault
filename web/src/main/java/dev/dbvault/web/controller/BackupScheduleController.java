@@ -5,6 +5,7 @@ import java.util.NoSuchElementException;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import org.springframework.context.MessageSource;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.validation.BindingResult;
@@ -40,6 +41,7 @@ public class BackupScheduleController {
             "zoneId", "zoneId");
 
     private final ManageBackupScheduleService schedules;
+    private final MessageSource messages;
     private final ManageDatabaseTargetService targets;
 
     @GetMapping
@@ -67,7 +69,7 @@ public class BackupScheduleController {
         }
         try {
             BackupSchedule saved = schedules.create(form.toCommand());
-            flash.addFlashAttribute("message", "Created schedule '%s'".formatted(saved.getName()));
+            flash.addFlashAttribute("message", ConsoleText.of(messages, "flash.schedule.created", saved.getName()));
             return "redirect:/schedules";
         } catch (DuplicateScheduleNameException e) {
             binding.rejectValue("name", "schedule.duplicate", e.getMessage());
@@ -109,7 +111,7 @@ public class BackupScheduleController {
         }
         try {
             BackupSchedule saved = schedules.edit(id, form.toCommand());
-            flash.addFlashAttribute("message", "Saved schedule '%s'".formatted(saved.getName()));
+            flash.addFlashAttribute("message", ConsoleText.of(messages, "flash.schedule.saved", saved.getName()));
             return "redirect:/schedules";
         } catch (DuplicateScheduleNameException e) {
             binding.rejectValue("name", "schedule.duplicate", e.getMessage());
@@ -126,9 +128,9 @@ public class BackupScheduleController {
         try {
             BackupSchedule schedule = schedules.get(id);
             schedules.delete(id);
-            flash.addFlashAttribute("message", "Deleted schedule '%s'".formatted(schedule.getName()));
+            flash.addFlashAttribute("message", ConsoleText.of(messages, "flash.schedule.deleted", schedule.getName()));
         } catch (NoSuchElementException e) {
-            flash.addFlashAttribute("message", "Schedule already deleted");
+            flash.addFlashAttribute("message", ConsoleText.of(messages, "flash.schedule.alreadyDeleted"));
         } catch (IllegalStateException e) {
             flash.addFlashAttribute("error", e.getMessage());
         }
@@ -155,8 +157,8 @@ public class BackupScheduleController {
         }
     }
 
-    private static String gone(RedirectAttributes flash) {
-        flash.addFlashAttribute("error", "That schedule no longer exists");
+    private String gone(RedirectAttributes flash) {
+        flash.addFlashAttribute("error", ConsoleText.of(messages, "flash.schedule.gone"));
         return "redirect:/schedules";
     }
 }

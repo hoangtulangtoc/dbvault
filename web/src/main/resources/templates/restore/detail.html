@@ -1,41 +1,42 @@
 <!DOCTYPE html>
 <html lang="en" xmlns:th="http://www.thymeleaf.org"
-      th:replace="~{layout/base :: page('Restore', 'restores', ~{:: #content})}">
+      th:replace="~{layout/base :: page(#{restore.title}, 'restores', ~{:: #content})}">
 <body>
 <!-- data-live: followed by app.js while running, as on the backup page (ADR-010). -->
 <div id="content" data-live
      th:attr="data-live-active=${restore.status.name() == 'RUNNING'},
-              data-live-announce=|Restore ${#strings.toLowerCase(restore.status)}|">
+              data-live-announce=${#messages.msg('restore.announce.' + restore.status.name())},
+              data-live-signed-out=#{live.signedOut},data-live-sign-in-again=#{live.signInAgain},data-live-lost=#{live.lost},data-live-retrying=#{live.retrying}">
 
   <div class="page-header">
     <div>
-      <div class="eyebrow">Restore</div>
-      <h1 th:text="${targetName != null ? targetName : '(removed)'}">production</h1>
+      <div class="eyebrow" th:text="#{restore.title}">Restore</div>
+      <h1 th:text="${targetName != null ? targetName : #messages.msg('backups.removedTarget')}">production</h1>
       <p class="mono"
          th:text="${#temporals.format(
                      restore.startedAt.atOffset(T(java.time.ZoneOffset).UTC),
                      'yyyy-MM-dd HH:mm:ss')} + ' UTC'">…</p>
     </div>
     <div class="actions">
-      <a class="button" th:href="@{/restores}">All restores</a>
+      <a class="button" th:href="@{/restores}" th:text="#{restore.all}">All restores</a>
     </div>
   </div>
 
   <p class="alert alert-info" th:if="${restore.status.name() == 'RUNNING'}">
-    This restore is still running. This page follows it and updates when it finishes.
-    <noscript>With JavaScript off, reload the page to see where it got to.</noscript>
+    <th:block th:text="#{restore.running}">This restore is still running. This page follows it and updates when it finishes.</th:block>
+    <noscript th:text="#{backup.running.noscript}">With JavaScript off, reload the page to see where it got to.</noscript>
   </p>
 
   <div class="panel">
     <dl class="detail-grid">
-      <dt>Status</dt>
+      <dt th:text="#{backups.col.status}">Status</dt>
       <dd th:insert="~{fragments/execution-status :: statusBadge(${restore.status})}"></dd>
 
-      <dt>Into target</dt>
-      <dd th:text="${targetName != null ? targetName : '(removed)'}">production</dd>
+      <dt th:text="#{restore.into}">Into target</dt>
+      <dd th:text="${targetName != null ? targetName : #messages.msg('backups.removedTarget')}">production</dd>
 
-      <dt>From backup</dt>
-      <dd th:if="${backup == null}">(removed)</dd>
+      <dt th:text="#{restores.col.from}">From backup</dt>
+      <dd th:if="${backup == null}" th:text="#{backups.removedTarget}">(removed)</dd>
       <dd class="mono" th:unless="${backup == null}">
         <a th:href="@{/executions/{id}(id=${backup.id})}"
            th:text="${#temporals.format(
@@ -45,16 +46,16 @@
 
       <!-- Not always the target above: a restore can go into any target
            (ADR-014), so where the backup was taken is said separately. -->
-      <dt>Taken from</dt>
-      <dd th:text="${backup == null ? '—' : (sourceName != null ? sourceName : '(removed)')}">production</dd>
+      <dt th:text="#{restore.takenFrom}">Taken from</dt>
+      <dd th:text="${backup == null ? '—' : (sourceName != null ? sourceName : #messages.msg('backups.removedTarget'))}">production</dd>
 
-      <dt>Started</dt>
+      <dt th:text="#{backups.col.started}">Started</dt>
       <dd class="mono"
           th:text="${#temporals.format(
                       restore.startedAt.atOffset(T(java.time.ZoneOffset).UTC),
                       'yyyy-MM-dd HH:mm:ss')} + ' UTC'">…</dd>
 
-      <dt>Finished</dt>
+      <dt th:text="#{backup.finished}">Finished</dt>
       <dd class="mono" th:if="${restore.finishedAt == null}">—</dd>
       <dd class="mono" th:unless="${restore.finishedAt == null}"
           th:text="${#temporals.format(
@@ -64,7 +65,7 @@
   </div>
 
   <div th:if="${restore.errorMessage != null}">
-    <div class="section-heading"><h2>Why it failed</h2></div>
+    <div class="section-heading"><h2 th:text="#{backup.whyFailed}">Why it failed</h2></div>
     <!-- Where it stopped matters more here than anywhere else in the tool: the
          database may be partly old and partly new. -->
     <pre class="error-output" th:text="${restore.errorMessage}"></pre>

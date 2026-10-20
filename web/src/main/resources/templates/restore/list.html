@@ -1,60 +1,62 @@
 <!DOCTYPE html>
 <html lang="en" xmlns:th="http://www.thymeleaf.org"
-      th:replace="~{layout/base :: page('Restores', 'restores', ~{:: #content})}">
+      th:replace="~{layout/base :: page(#{nav.restores}, 'restores', ~{:: #content})}">
 <body>
 <div id="content">
 
   <div class="page-header">
     <div>
-      <div class="eyebrow">Operations</div>
-      <h1>Restores</h1>
-      <p>Every restore applied to a target, newest first.</p>
+      <div class="eyebrow" th:text="#{nav.operations}">Operations</div>
+      <h1 th:text="#{nav.restores}">Restores</h1>
+      <p th:text="#{restores.intro}">Every restore applied to a target, newest first.</p>
     </div>
   </div>
 
   <p class="empty-state panel" th:if="${restores.isEmpty() and !history.hasNewer()}">
-    No restores yet. Start one from a <a th:href="@{/executions}">backup</a>.
+    <th:block th:text="#{restores.empty.before}">No restores yet. Start one from a</th:block>
+    <a th:href="@{/executions}" th:text="#{restores.empty.link}">backup</a>.
   </p>
 
   <p class="empty-state panel" th:if="${restores.isEmpty() and history.hasNewer()}">
-    Nothing this far back. <a th:href="@{/restores}">Back to the newest</a>.
+    <th:block th:text="#{backups.pastEnd}">Nothing this far back.</th:block>
+    <a th:href="@{/restores}" th:text="#{backups.pastEnd.link}">Back to the newest</a>.
   </p>
 
   <div class="table-wrap responsive-cards" th:unless="${restores.isEmpty()}">
     <table>
       <thead>
         <tr>
-          <th scope="col">Started</th>
-          <th scope="col">Into</th>
-          <th scope="col">From backup</th>
-          <th scope="col">Status</th>
-          <th scope="col"><span class="visually-hidden">Actions</span></th>
+          <th scope="col" th:text="#{backups.col.started}">Started</th>
+          <th scope="col" th:text="#{restores.col.into}">Into</th>
+          <th scope="col" th:text="#{restores.col.from}">From backup</th>
+          <th scope="col" th:text="#{backups.col.status}">Status</th>
+          <th scope="col"><span class="visually-hidden" th:text="#{targets.col.actions}">Actions</span></th>
         </tr>
       </thead>
       <tbody>
         <tr th:each="restore : ${restores}" th:with="backup=${backups.get(restore.backupExecutionId)}">
-          <td data-label="Started" class="mono"
+          <td th:attr="data-label=#{backups.col.started}" class="mono"
               th:text="${#temporals.format(
                           restore.startedAt.atOffset(T(java.time.ZoneOffset).UTC),
                           'yyyy-MM-dd HH:mm:ss')} + ' UTC'">…</td>
-          <td data-label="Into"
-              th:text="${targetNames.getOrDefault(restore.targetId, '(removed)')}">production</td>
+          <td th:attr="data-label=#{restores.col.into}"
+              th:text="${targetNames.getOrDefault(restore.targetId, #messages.msg('backups.removedTarget'))}">production</td>
           <!-- Which backup: when it was taken and, since a restore can go into
                another target (ADR-014), of which. -->
-          <td data-label="From backup">
+          <td th:attr="data-label=#{restores.col.from}">
             <span class="mono" th:if="${backup == null}">—</span>
             <div class="cell-stack" th:unless="${backup == null}">
               <span class="mono nowrap"
                     th:text="${#temporals.format(backup.startedAt.atOffset(T(java.time.ZoneOffset).UTC),
                                                  'yyyy-MM-dd HH:mm')}">…</span>
               <span class="field-hint"
-                    th:text="|of ${targetNames.getOrDefault(backup.targetId, '(removed)')}|">of production</span>
+                    th:text="#{restores.of(${targetNames.getOrDefault(backup.targetId, #messages.msg('backups.removedTarget'))})}">of production</span>
             </div>
           </td>
-          <td data-label="Status" th:insert="~{fragments/execution-status :: statusBadge(${restore.status})}"></td>
+          <td th:attr="data-label=#{backups.col.status}" th:insert="~{fragments/execution-status :: statusBadge(${restore.status})}"></td>
           <td class="actions">
             <div class="row-actions">
-              <a class="button button-small" th:href="@{/restores/{id}(id=${restore.id})}">Details</a>
+              <a class="button button-small" th:href="@{/restores/{id}(id=${restore.id})}" th:text="#{backups.details}">Details</a>
             </div>
           </td>
         </tr>

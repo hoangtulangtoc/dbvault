@@ -301,10 +301,10 @@
                         // timed out, or signed out from another tab. Asking
                         // again will not change that, so stop and say so. The
                         // link comes back here once signed in.
-                        warn('You have been signed out. ');
+                        warn(region.dataset.liveSignedOut + ' ');
                         var again = document.createElement('a');
                         again.href = window.location.href;
-                        again.textContent = 'Sign in again to keep following this job.';
+                        again.textContent = region.dataset.liveSignInAgain;
                         warning.appendChild(again);
                         return;
                     }
@@ -312,7 +312,7 @@
                     if (!next) {
                         // Redirected somewhere else — the job was deleted, most
                         // likely. Say so rather than keep asking.
-                        warn('This page can no longer follow the job. Reload to see what happened.');
+                        warn(region.dataset.liveLost);
                         return;
                     }
                     clearWarning();
@@ -325,7 +325,7 @@
                     if (announcer) announcer.textContent = next.dataset.liveAnnounce || '';
                 })
                 .catch(function () {
-                    warn('Lost contact with the console. The job is unaffected; still trying…');
+                    warn(region.dataset.liveRetrying);
                     delay = Math.min(delay * 2, MAX_BACKOFF);
                     schedule();
                 });

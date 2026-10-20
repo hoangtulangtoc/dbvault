@@ -595,8 +595,8 @@ class DatabaseTargetControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(view().name("database/delete"))
                 .andExpect(content().string(org.hamcrest.Matchers.containsString("All 2 of its backups go with it")))
-                .andExpect(content().string(org.hamcrest.Matchers.containsString("16384</span> bytes in all")))
-                .andExpect(content().string(org.hamcrest.Matchers.containsString("3</span> restore records")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("16384 bytes in all")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("3 restore records")))
                 .andExpect(content().string(org.hamcrest.Matchers.containsString("name=\"confirmation\"")))
                 .andExpect(content().string(org.hamcrest.Matchers.containsString("Remove it and its backups")));
     }
