@@ -8,6 +8,7 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.www.BasicAuthenticationFilter;
 
 /**
  * {@code /api/**} is for scripts and dbvault-cli: the same operator account, presented with HTTP
@@ -24,8 +25,9 @@ public class ApiSecurityConfig {
 
     @Bean
     @Order(1)
-    SecurityFilterChain apiSecurity(HttpSecurity http) throws Exception {
+    SecurityFilterChain apiSecurity(HttpSecurity http, SignInThrottle throttle) throws Exception {
         http
+                .addFilterBefore(new SignInThrottleFilter(throttle), BasicAuthenticationFilter.class)
                 // The Prometheus scrape is a script too: same credentials, same rules.
                 .securityMatcher("/api/**", "/actuator/prometheus")
                 .authorizeHttpRequests(requests -> requests.anyRequest().authenticated())

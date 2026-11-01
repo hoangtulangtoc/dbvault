@@ -90,6 +90,32 @@ class SecurityConfigTest {
                 .andExpect(unauthenticated());
     }
 
+    /** Ten wrong passwords from one address, and the eleventh attempt is not even checked. */
+    @Test
+    void anAddressThatKeepsGuessingIsTurnedAwayEvenWithTheRightPassword() throws Exception {
+        for (int i = 0; i < 10; i++) {
+            mockMvc.perform(signIn("wrong " + i, "203.0.113.7"))
+                    .andExpect(redirectedUrl("/login?error"));
+        }
+        mockMvc.perform(signIn(PASSWORD, "203.0.113.7"))
+                .andExpect(redirectedUrl("/login?locked"))
+                .andExpect(unauthenticated());
+        mockMvc.perform(signIn(PASSWORD, "203.0.113.8"))
+                .andExpect(authenticated());
+        mockMvc.perform(get("/login").param("locked", ""))
+                .andExpect(content().string(containsString("Too many failed sign-ins from your address")));
+    }
+
+    private static org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder signIn(String password, String address) {
+        return org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/login")
+                .param("username", "operator").param("password", password)
+                .with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf())
+                .with(request -> {
+                    request.setRemoteAddr(address);
+                    return request;
+                });
+    }
+
     /** Same outcome, same words: nothing to tell a guesser the username is right. */
     @Test
     void anUnknownUsernameFailsTheSameWay() throws Exception {

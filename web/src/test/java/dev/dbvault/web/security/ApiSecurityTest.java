@@ -83,6 +83,23 @@ class ApiSecurityTest {
     }
 
     @Test
+    void anAddressThatKeepsGuessingGets429WithoutAPasswordCheck() throws Exception {
+        for (int i = 0; i < 10; i++) {
+            mockMvc.perform(get("/api/v1/targets").with(httpBasic("operator", "wrong " + i)).with(request -> {
+                request.setRemoteAddr("203.0.113.9");
+                return request;
+            })).andExpect(status().isUnauthorized());
+        }
+        mockMvc.perform(get("/api/v1/targets").with(httpBasic("operator", PASSWORD)).with(request -> {
+                    request.setRemoteAddr("203.0.113.9");
+                    return request;
+                }))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(header().string("Retry-After", "900"))
+                .andExpect(jsonPath("$.error").value("Too many failed sign-ins from this address; try again later"));
+    }
+
+    @Test
     void listsTargetsWithoutTheirPassword() throws Exception {
         when(targets.listAll()).thenReturn(List.of(shop()));
 

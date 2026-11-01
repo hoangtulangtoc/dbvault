@@ -97,6 +97,10 @@ dbvault:
     # (drop the leading colon). No default, for the same reason as the
     # encryption key below: starting without one must fail loudly.
     password-hash: ${OPERATOR_PASSWORD_HASH:}
+  sign-in:
+    # Failed sign-ins one address may make within `lock` before it must wait `lock` (deployment.md).
+    max-failures: ${DBVAULT_SIGN_IN_MAX_FAILURES:10}
+    lock: ${DBVAULT_SIGN_IN_LOCK:PT15M}
 
   mysql:
     # The tool drives the MySQL client binaries directly. A wrong path here

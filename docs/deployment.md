@@ -188,9 +188,19 @@ TLS-terminating reverse proxy in front, and then set:
   log shows the proxy's address instead of the client's. Only set it when the
   proxy is the only way in; otherwise a client can claim any address.
 
-**No limit on sign-in attempts.** Each guess costs a bcrypt check, which is
-slow, but nothing stops a patient attacker. Failed attempts are logged as
-`Sign-in failed for '…' from <address>`; rate limiting belongs in the proxy.
+**Sign-in attempts are limited per address.** After 10 failed sign-ins from
+one address within 15 minutes, that address cannot sign in, from the console
+or the API, until the 15 minutes are over: the console says so, and the API
+answers `429` with `Retry-After`. A successful sign-in clears the count, and
+a restart forgets it. `DBVAULT_SIGN_IN_MAX_FAILURES` and `DBVAULT_SIGN_IN_LOCK`
+(an ISO-8601 duration) change the numbers. Failed attempts are still logged as
+`Sign-in failed for '…' from <address>`.
+
+We recommend also rate-limiting `POST /login` at your reverse proxy.
+
+The limit counts the address dbvault sees. Behind a proxy that doesn't forward
+the client address, every client shares one address and is locked out
+together; `SERVER_FORWARD_HEADERS_STRATEGY=native`, above, is what forwards it.
 
 **One shared account.** The history says a restore was started, not by whom.
 
