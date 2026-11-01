@@ -180,23 +180,22 @@ class ApiSecurityTest {
                 .andExpect(status().isNotFound());
     }
 
+    /** Removed in 1.2.0: an attempt is followed only under its backup. */
     @Test
-    void theOldVerificationPathStillAnswersButSaysItIsDeprecated() throws Exception {
+    void theOldVerificationPathIsGone() throws Exception {
         UUID backup = UUID.randomUUID();
         UUID attempt = UUID.randomUUID();
         when(verifications.findById(attempt)).thenReturn(Optional.of(
                 RestoreVerificationExecution.started(attempt, backup, CREATED)));
 
         mockMvc.perform(get("/api/v1/verifications/{id}", attempt).with(httpBasic("operator", PASSWORD)))
-                .andExpect(status().isOk())
-                .andExpect(header().string("Deprecation", "true"))
-                .andExpect(header().string("Link",
-                        "</api/v1/backups/" + backup + "/verifications/" + attempt + ">; rel=\"successor-version\""));
+                .andExpect(status().isNotFound());
     }
 
     @Test
     void anUnknownVerificationIsA404() throws Exception {
-        mockMvc.perform(get("/api/v1/verifications/{id}", UUID.randomUUID()).with(httpBasic("operator", PASSWORD)))
+        mockMvc.perform(get("/api/v1/backups/{b}/verifications/{id}", UUID.randomUUID(), UUID.randomUUID())
+                        .with(httpBasic("operator", PASSWORD)))
                 .andExpect(status().isNotFound());
     }
 
