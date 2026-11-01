@@ -6,6 +6,7 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.UUID;
 
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -38,13 +39,35 @@ public class VerificationApiController {
     ResponseEntity<VerificationView> start(@PathVariable UUID id) {
         UUID started = verification.start(id);
         VerificationView view = verifications.findById(started).map(VerificationView::of).orElseThrow();
-        return ResponseEntity.accepted().location(URI.create("/api/v1/verifications/" + started)).body(view);
+        return ResponseEntity.accepted().location(URI.create(path(id, started))).body(view);
     }
 
+    /** One attempt, under the backup it verifies; an attempt of another backup is a {@code 404}. */
+    @GetMapping("/backups/{backupId}/verifications/{id}")
+    VerificationView get(@PathVariable UUID backupId, @PathVariable UUID id) {
+        return verifications.findById(id).filter(attempt -> attempt.getBackupExecutionId().equals(backupId))
+                .map(VerificationView::of)
+                .orElseThrow(() -> new NoSuchElementException(
+                        "No restore verification with id " + id + " for backup " + backupId));
+    }
+
+    /**
+     * Deprecated: the attempt without its backup in the path. It still answers, with {@code Deprecation} and a
+     * {@code Link} to the path above (RFC 9745, RFC 8288), and will be removed in a later release.
+     */
+    @Deprecated
     @GetMapping("/verifications/{id}")
-    VerificationView get(@PathVariable UUID id) {
-        return verifications.findById(id).map(VerificationView::of)
+    ResponseEntity<VerificationView> getDeprecated(@PathVariable UUID id) {
+        VerificationView view = verifications.findById(id).map(VerificationView::of)
                 .orElseThrow(() -> new NoSuchElementException("No restore verification with id " + id));
+        return ResponseEntity.ok()
+                .header("Deprecation", "true")
+                .header(HttpHeaders.LINK, "<" + path(view.backupId(), id) + ">; rel=\"successor-version\"")
+                .body(view);
+    }
+
+    private static String path(UUID backupId, UUID id) {
+        return "/api/v1/backups/" + backupId + "/verifications/" + id;
     }
 
     @ExceptionHandler(NoSuchElementException.class)
