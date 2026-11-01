@@ -147,7 +147,7 @@ class ApiSecurityTest {
 
         mockMvc.perform(post("/api/v1/backups/{id}/verifications", backup).with(httpBasic("operator", PASSWORD)))
                 .andExpect(status().isAccepted())
-                .andExpect(header().string("Location", "/api/v1/verifications/" + attempt))
+                .andExpect(header().string("Location", "/api/v1/backups/" + backup + "/verifications/" + attempt))
                 .andExpect(header().doesNotExist("Set-Cookie"))
                 .andExpect(jsonPath("$.status").value("RUNNING"))
                 .andExpect(jsonPath("$.backupId").value(backup.toString()));
@@ -162,6 +162,36 @@ class ApiSecurityTest {
                         .with(httpBasic("operator", PASSWORD)))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.error").value("Restore verification is disabled for this deployment"));
+    }
+
+    @Test
+    void followsAnAttemptUnderItsBackup() throws Exception {
+        UUID backup = UUID.randomUUID();
+        UUID attempt = UUID.randomUUID();
+        when(verifications.findById(attempt)).thenReturn(Optional.of(
+                RestoreVerificationExecution.started(attempt, backup, CREATED)));
+
+        mockMvc.perform(get("/api/v1/backups/{b}/verifications/{id}", backup, attempt).with(httpBasic("operator", PASSWORD)))
+                .andExpect(status().isOk())
+                .andExpect(header().doesNotExist("Deprecation"))
+                .andExpect(jsonPath("$.status").value("RUNNING"));
+        mockMvc.perform(get("/api/v1/backups/{b}/verifications/{id}", UUID.randomUUID(), attempt)
+                        .with(httpBasic("operator", PASSWORD)))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void theOldVerificationPathStillAnswersButSaysItIsDeprecated() throws Exception {
+        UUID backup = UUID.randomUUID();
+        UUID attempt = UUID.randomUUID();
+        when(verifications.findById(attempt)).thenReturn(Optional.of(
+                RestoreVerificationExecution.started(attempt, backup, CREATED)));
+
+        mockMvc.perform(get("/api/v1/verifications/{id}", attempt).with(httpBasic("operator", PASSWORD)))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Deprecation", "true"))
+                .andExpect(header().string("Link",
+                        "</api/v1/backups/" + backup + "/verifications/" + attempt + ">; rel=\"successor-version\""));
     }
 
     @Test
