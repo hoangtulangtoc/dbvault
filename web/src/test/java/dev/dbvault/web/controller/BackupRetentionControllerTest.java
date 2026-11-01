@@ -111,6 +111,34 @@ class BackupRetentionControllerTest {
     }
 
     @Test
+    void previewShowsWhatTheNextRunWouldDeleteWithoutSaving() throws Exception {
+        when(retention.getTarget(TARGET_ID)).thenReturn(target());
+        when(retention.findForTarget(TARGET_ID)).thenReturn(Optional.empty());
+        when(retention.preview(TARGET_ID, 2)).thenReturn(List.of(
+                dev.dbvault.core.model.BackupExecution.started(UUID.randomUUID(), TARGET_ID, Instant.parse("2026-09-01T02:00:00Z")),
+                dev.dbvault.core.model.BackupExecution.started(UUID.randomUUID(), TARGET_ID, Instant.parse("2026-09-03T02:00:00Z"))));
+
+        mockMvc.perform(post("/retention/{targetId}/preview", TARGET_ID).with(csrf()).param("keepSuccessful", "2"))
+                .andExpect(status().isOk())
+                .andExpect(view().name("retention/form"))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("Keeping 2 would delete 2 backup(s) at the next run")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("2026-09-01 02:00")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("2026-09-03 02:00")));
+        org.mockito.Mockito.verify(retention, org.mockito.Mockito.never()).save(any(), any());
+    }
+
+    @Test
+    void previewOfAPolicyThatDeletesNothingSaysSo() throws Exception {
+        when(retention.getTarget(TARGET_ID)).thenReturn(target());
+        when(retention.findForTarget(TARGET_ID)).thenReturn(Optional.empty());
+        when(retention.preview(TARGET_ID, 30)).thenReturn(List.of());
+
+        mockMvc.perform(post("/retention/{targetId}/preview", TARGET_ID).with(csrf()).param("keepSuccessful", "30"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("Keeping 30 would delete nothing at the next run.")));
+    }
+
+    @Test
     void disablingRequiresCsrf() throws Exception {
         mockMvc.perform(post("/retention/{targetId}/disable", TARGET_ID).with(user("operator")))
                 .andExpect(status().isForbidden());

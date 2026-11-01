@@ -18,9 +18,11 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import dev.dbvault.core.model.BackupExecution;
 import dev.dbvault.core.model.BackupRetentionPolicy;
 import dev.dbvault.core.model.DatabaseEngine;
 import dev.dbvault.core.model.DatabaseTarget;
+import dev.dbvault.core.port.BackupExecutionRepository;
 import dev.dbvault.core.port.BackupRetentionPolicyRepository;
 import dev.dbvault.core.port.DatabaseTargetRepository;
 
@@ -32,13 +34,14 @@ class ManageBackupRetentionServiceTest {
 
     @Mock private BackupRetentionPolicyRepository policies;
     @Mock private DatabaseTargetRepository targets;
+    @Mock private BackupExecutionRepository backups;
 
     private ManageBackupRetentionService service;
 
     @BeforeEach
     void setUp() {
         service = new ManageBackupRetentionService(
-                policies, targets, Clock.fixed(NOW, ZoneOffset.UTC));
+                policies, targets, backups, Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
     @Test
@@ -54,6 +57,18 @@ class ManageBackupRetentionServiceTest {
         assertThat(views).hasSize(2);
         assertThat(views.get(0).policy()).contains(policy);
         assertThat(views.get(1).policy()).isEmpty();
+    }
+
+    @Test
+    void previewListsWhatTheNextRunWouldDeleteOldestFirstAndDeletesNothing() {
+        BackupExecution newer = BackupExecution.started(UUID.randomUUID(), TARGET_ID, NOW.minusSeconds(3600));
+        BackupExecution older = BackupExecution.started(UUID.randomUUID(), TARGET_ID, NOW.minusSeconds(7200));
+        when(targets.findById(TARGET_ID)).thenReturn(Optional.of(target(TARGET_ID, "alpha")));
+        when(backups.findRetentionCandidates(TARGET_ID, 3)).thenReturn(List.of(newer, older));
+
+        assertThat(service.preview(TARGET_ID, 3)).containsExactly(older, newer);
+        verify(backups).findRetentionCandidates(TARGET_ID, 3);
+        org.mockito.Mockito.verifyNoMoreInteractions(backups, policies);
     }
 
     @Test
