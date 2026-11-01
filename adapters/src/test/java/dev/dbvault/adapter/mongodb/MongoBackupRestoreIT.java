@@ -13,6 +13,7 @@ import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.DisabledIfEnvironmentVariable;
 import org.junit.jupiter.api.io.TempDir;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.junit.jupiter.Container;
@@ -25,6 +26,11 @@ import dev.dbvault.core.model.DatabaseEngine;
 import dev.dbvault.core.model.DatabaseTarget;
 
 /** Real MongoDB plus the same host Database Tools used in production. */
+// Quarantined on GitHub Actions only (DBV-45): the mongo container stops during startup on the runners
+// in most runs, which blocks every pull request. It still runs everywhere else, a developer's
+// `mvn verify` included. Remove this once DBV-45 has found why.
+@DisabledIfEnvironmentVariable(named = "GITHUB_ACTIONS", matches = "true",
+        disabledReason = "DBV-45: the mongo container stops during startup on the CI runners")
 @Testcontainers
 class MongoBackupRestoreIT {
 
