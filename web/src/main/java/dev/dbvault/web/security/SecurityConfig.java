@@ -4,6 +4,7 @@ import java.util.LinkedHashMap;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Import;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -12,6 +13,7 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.access.AccessDeniedHandler;
 import org.springframework.security.web.access.AccessDeniedHandlerImpl;
 import org.springframework.security.web.access.DelegatingAccessDeniedHandler;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.web.csrf.MissingCsrfTokenException;
 import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter.ReferrerPolicy;
 
@@ -29,6 +31,7 @@ import jakarta.servlet.DispatcherType;
  * appear in it; a form written with a plain {@code action} would be refused.
  */
 @Configuration
+@Import(SignInThrottle.class)
 public class SecurityConfig {
 
     /**
@@ -49,8 +52,9 @@ public class SecurityConfig {
             "object-src 'none'");
 
     @Bean
-    SecurityFilterChain consoleSecurity(HttpSecurity http) throws Exception {
+    SecurityFilterChain consoleSecurity(HttpSecurity http, SignInThrottle throttle) throws Exception {
         http
+                .addFilterBefore(new SignInThrottleFilter(throttle), UsernamePasswordAuthenticationFilter.class)
                 .authorizeHttpRequests(requests -> requests
                         // A failure on a public page is still rendered by
                         // error.html, which is reached by an ERROR dispatch.

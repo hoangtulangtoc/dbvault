@@ -32,6 +32,9 @@
       <div class="alert alert-danger" role="alert" th:if="${param.error != null}">
         <p th:text="#{login.error}">Username or password is incorrect.</p>
       </div>
+      <div class="alert alert-danger" role="alert" th:if="${param.locked != null}">
+        <p th:text="#{login.locked}">Too many failed sign-ins from your address. Wait 15 minutes, then try again.</p>
+      </div>
       <div class="alert alert-success" role="status" th:if="${param.logout != null}">
         <p th:text="#{login.loggedOut}">You have signed out.</p>
       </div>
