@@ -50,8 +50,8 @@
         <tr th:each="execution : ${preview.executions()}">
           <td th:attr="data-label=#{backups.col.started}" class="mono"
               th:text="${#temporals.format(
-                          execution.startedAt.atOffset(T(java.time.ZoneOffset).UTC),
-                          'yyyy-MM-dd HH:mm:ss')} + ' UTC'">…</td>
+                          execution.startedAt.atZone(consoleZone),
+                          'yyyy-MM-dd HH:mm:ss')} + ' ' + ${consoleZoneLabel}">…</td>
           <td th:attr="data-label=#{backups.col.target}" th:text="${targetNames.getOrDefault(execution.targetId, #messages.msg('backups.removedTarget'))}">production</td>
           <td th:attr="data-label=#{backups.col.status}" th:insert="~{fragments/execution-status :: statusBadge(${execution.status})}"></td>
           <!-- The file name alone: the fragment that adds the directory is a

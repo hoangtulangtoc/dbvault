@@ -16,8 +16,8 @@
       <h1 th:text="${targetName != null ? targetName : #messages.msg('backups.removedTarget')}">production</h1>
       <p class="mono"
          th:text="${#temporals.format(
-                     execution.startedAt.atOffset(T(java.time.ZoneOffset).UTC),
-                     'yyyy-MM-dd HH:mm:ss')} + ' UTC'">…</p>
+                     execution.startedAt.atZone(consoleZone),
+                     'yyyy-MM-dd HH:mm:ss')} + ' ' + ${consoleZoneLabel}">…</p>
     </div>
     <div class="actions">
       <a class="button" th:href="@{/executions}" th:text="#{backup.all}">All backups</a>
@@ -64,15 +64,15 @@
       <dt th:text="#{backups.col.started}">Started</dt>
       <dd class="mono"
           th:text="${#temporals.format(
-                      execution.startedAt.atOffset(T(java.time.ZoneOffset).UTC),
-                      'yyyy-MM-dd HH:mm:ss')} + ' UTC'">…</dd>
+                      execution.startedAt.atZone(consoleZone),
+                      'yyyy-MM-dd HH:mm:ss')} + ' ' + ${consoleZoneLabel}">…</dd>
 
       <dt th:text="#{backup.finished}">Finished</dt>
       <dd class="mono" th:if="${execution.finishedAt == null}">—</dd>
       <dd class="mono" th:unless="${execution.finishedAt == null}"
           th:text="${#temporals.format(
-                      execution.finishedAt.atOffset(T(java.time.ZoneOffset).UTC),
-                      'yyyy-MM-dd HH:mm:ss')} + ' UTC'">…</dd>
+                      execution.finishedAt.atZone(consoleZone),
+                      'yyyy-MM-dd HH:mm:ss')} + ' ' + ${consoleZoneLabel}">…</dd>
 
       <dt th:text="#{backup.artifact}">Artifact</dt>
       <dd th:replace="~{fragments/artifact-path :: artifactPath(${execution.artifactPath})}">—</dd>
@@ -118,8 +118,8 @@
     <div class="table-wrap" th:unless="${verificationHistory.isEmpty()}">
       <table><thead><tr><th th:text="#{backups.col.started}">Started</th><th th:text="#{backup.finished}">Finished</th><th th:text="#{backups.col.status}">Status</th><th th:text="#{backup.checked}">Checked</th><th th:text="#{backup.result}">Result</th></tr></thead>
         <tbody><tr th:each="verification : ${verificationHistory}">
-          <td class="mono" th:text="${#temporals.format(verification.startedAt.atOffset(T(java.time.ZoneOffset).UTC), 'yyyy-MM-dd HH:mm:ss')} + ' UTC'">…</td>
-          <td class="mono" th:text="${verification.finishedAt == null ? '—' : #temporals.format(verification.finishedAt.atOffset(T(java.time.ZoneOffset).UTC), 'yyyy-MM-dd HH:mm:ss') + ' UTC'}">…</td>
+          <td class="mono" th:text="${#temporals.format(verification.startedAt.atZone(consoleZone), 'yyyy-MM-dd HH:mm:ss')} + ' ' + ${consoleZoneLabel}">…</td>
+          <td class="mono" th:text="${verification.finishedAt == null ? '—' : #temporals.format(verification.finishedAt.atZone(consoleZone), 'yyyy-MM-dd HH:mm:ss') + ' ' + consoleZoneLabel}">…</td>
           <td th:insert="~{fragments/execution-status :: statusBadge(${verification.status})}"></td>
           <td th:text="${verification.checkedObjects != null ? verification.checkedObjects : '—'}">—</td>
           <td>

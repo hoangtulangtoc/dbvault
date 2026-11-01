@@ -94,6 +94,16 @@
         <a href="?lang=vi" hreflang="vi" lang="vi"
            th:attr="aria-current=${#locale.language == 'vi' ? 'true' : null}">Tiếng Việt</a>
       </nav>
+      <!-- A GET form, so the choice works from any page and is kept in a cookie, like the
+           language. No script: the content security policy allows none inline. -->
+      <form class="timezone-switch" method="get">
+        <label for="console-tz" th:text="#{layout.timeZone}">Time zone</label>
+        <select id="console-tz" name="tz">
+          <option th:each="zone : ${consoleZones}" th:value="${zone}" th:text="${zone}"
+                  th:selected="${zone == consoleZoneLabel}">UTC</option>
+        </select>
+        <button class="button button-small button-ghost" type="submit" th:text="#{layout.timeZone.apply}">Apply</button>
+      </form>
       <button class="theme-toggle" type="button" data-theme-toggle>
         <span data-theme-icon aria-hidden="true">☀</span><span data-theme-label th:attr="data-label-light=#{layout.theme.light},data-label-dark=#{layout.theme.dark}" th:text="#{layout.theme.light}">Light theme</span>
       </button>
