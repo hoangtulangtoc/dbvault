@@ -45,8 +45,8 @@
                arbitrary attribute such as aria-label. -->
           <tr th:each="execution : ${executions}"
               th:with="started=${#temporals.format(
-                                   execution.startedAt.atOffset(T(java.time.ZoneOffset).UTC),
-                                   'yyyy-MM-dd HH:mm:ss')} + ' UTC'">
+                                   execution.startedAt.atZone(consoleZone),
+                                   'yyyy-MM-dd HH:mm:ss')} + ' ' + ${consoleZoneLabel}">
             <!-- No box for a running backup: its file is still being written. -->
             <td th:data-label="#{backups.col.select}" class="select">
               <input type="checkbox" name="id" th:value="${execution.id}"

@@ -58,8 +58,8 @@
       <dt th:text="#{restoreConfirm.backupTaken}">Backup taken</dt>
       <dd class="mono"
           th:text="${#temporals.format(
-                      backup.startedAt.atOffset(T(java.time.ZoneOffset).UTC),
-                      'yyyy-MM-dd HH:mm:ss')} + ' UTC'">…</dd>
+                      backup.startedAt.atZone(consoleZone),
+                      'yyyy-MM-dd HH:mm:ss')} + ' ' + ${consoleZoneLabel}">…</dd>
       <dt th:text="#{restore.takenFrom}">Taken from</dt>
       <dd th:text="${source != null ? source.name : #messages.msg('backups.removedTarget')}">production</dd>
       <dt th:text="#{targets.col.engine}">Engine</dt>

@@ -27,8 +27,20 @@
       <div th:replace="~{fragments/field-error :: fieldError('keepSuccessful')}"></div>
     </div>
 
+    <div class="alert alert-warning" role="status" th:if="${preview != null and preview.count > 0}">
+      <th:block th:text="#{retention.preview.some(${preview.keep}, ${preview.count})}">Keeping 7 would delete 12 backups at the next run</th:block>
+      <span class="mono nowrap" th:text="${#temporals.format(preview.oldest.atOffset(T(java.time.ZoneOffset).UTC), 'yyyy-MM-dd HH:mm')}">2026-01-01 02:00</span>
+      –
+      <span class="mono nowrap" th:text="${#temporals.format(preview.newest.atOffset(T(java.time.ZoneOffset).UTC), 'yyyy-MM-dd HH:mm')}">2026-03-01 02:00</span>.
+      <th:block th:text="#{retention.preview.nothingYet}">Nothing has been deleted yet.</th:block>
+    </div>
+    <div class="alert alert-success" role="status" th:if="${preview != null and preview.count == 0}"
+         th:text="#{retention.preview.none(${preview.keep})}">Keeping 7 would delete nothing at the next run.</div>
+
     <div class="form-actions">
       <button class="button button-primary" type="submit" th:attr="data-busy-label=#{targetForm.saving}" th:text="#{retention.form.save}">Save retention policy</button>
+      <button class="button button-ghost" type="submit" th:formaction="@{/retention/{id}/preview(id=${target.id})}"
+              th:text="#{retention.form.preview}">Preview</button>
       <a class="button button-ghost" th:href="@{/retention}" th:text="#{common.cancel}">Cancel</a>
     </div>
   </form>

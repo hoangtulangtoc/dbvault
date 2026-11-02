@@ -269,6 +269,19 @@ class RestoreControllerTest {
                 .andExpect(content().string(containsString("of production")));
     }
 
+    /** A restore outlives its backup, which retention may delete: the list says so instead of a bare dash. */
+    @Test
+    void theListSaysWhenTheBackupARestoreCameFromWasDeleted() throws Exception {
+        RestoreExecution restore = RestoreExecution.started(UUID.randomUUID(), BACKUP_ID, DRILL_ID, STARTED);
+        when(restores.findNewestFirst(1, 50)).thenReturn(new HistoryPage<>(List.of(restore), 1, false));
+        when(backups.findAllById(List.of(BACKUP_ID))).thenReturn(List.of());
+        when(targets.listAll()).thenReturn(List.of(target(), drill()));
+
+        mockMvc.perform(get("/restores"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("Backup deleted since")));
+    }
+
     /** Only the backups this page mentions are read, not the whole history. */
     @Test
     void theListIsPagedAndReadsOnlyTheBackupsItShows() throws Exception {

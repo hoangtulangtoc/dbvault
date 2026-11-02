@@ -56,8 +56,8 @@
       <dd class="mono" th:if="${timestamp == null}">—</dd>
       <dd class="mono" th:unless="${timestamp == null}"
           th:text="${#temporals.format(
-                      timestamp.toInstant().atOffset(T(java.time.ZoneOffset).UTC),
-                      'yyyy-MM-dd HH:mm:ss')} + ' UTC'">2026-09-10 06:24:29 UTC</dd>
+                      timestamp.toInstant().atZone(consoleZone),
+                      'yyyy-MM-dd HH:mm:ss')} + ' ' + ${consoleZoneLabel}">2026-09-10 06:24:29 UTC</dd>
     </dl>
     <div class="form-actions">
       <a class="button button-primary" th:href="@{/databases}" th:text="#{error.goTargets}">Go to targets</a>

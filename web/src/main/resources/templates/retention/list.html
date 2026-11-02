@@ -42,7 +42,7 @@
           <td th:attr="data-label=#{retention.col.lastRun}">
             <span class="badge badge-neutral" th:if="${policy == null or policy.lastRunAt == null}" th:text="#{targets.backup.never}">Never</span>
             <span class="mono nowrap" th:if="${policy != null and policy.lastRunAt != null}"
-                  th:text="${#temporals.format(policy.lastRunAt.atOffset(T(java.time.ZoneOffset).UTC), 'yyyy-MM-dd HH:mm:ss')} + ' UTC'">2026-09-22 03:00:00 UTC</span>
+                  th:text="${#temporals.format(policy.lastRunAt.atZone(consoleZone), 'yyyy-MM-dd HH:mm:ss')} + ' ' + ${consoleZoneLabel}">2026-09-22 03:00:00 UTC</span>
           </td>
           <td th:attr="data-label=#{retention.col.outcome}">
             <span class="badge badge-neutral" th:if="${policy == null or policy.lastRunAt == null}">—</span>

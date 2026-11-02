@@ -14,8 +14,8 @@
       <h1 th:text="${targetName != null ? targetName : #messages.msg('backups.removedTarget')}">production</h1>
       <p class="mono"
          th:text="${#temporals.format(
-                     restore.startedAt.atOffset(T(java.time.ZoneOffset).UTC),
-                     'yyyy-MM-dd HH:mm:ss')} + ' UTC'">…</p>
+                     restore.startedAt.atZone(consoleZone),
+                     'yyyy-MM-dd HH:mm:ss')} + ' ' + ${consoleZoneLabel}">…</p>
     </div>
     <div class="actions">
       <a class="button" th:href="@{/restores}" th:text="#{restore.all}">All restores</a>
@@ -40,8 +40,8 @@
       <dd class="mono" th:unless="${backup == null}">
         <a th:href="@{/executions/{id}(id=${backup.id})}"
            th:text="${#temporals.format(
-                       backup.startedAt.atOffset(T(java.time.ZoneOffset).UTC),
-                       'yyyy-MM-dd HH:mm:ss')} + ' UTC'">…</a>
+                       backup.startedAt.atZone(consoleZone),
+                       'yyyy-MM-dd HH:mm:ss')} + ' ' + ${consoleZoneLabel}">…</a>
       </dd>
 
       <!-- Not always the target above: a restore can go into any target
@@ -52,15 +52,15 @@
       <dt th:text="#{backups.col.started}">Started</dt>
       <dd class="mono"
           th:text="${#temporals.format(
-                      restore.startedAt.atOffset(T(java.time.ZoneOffset).UTC),
-                      'yyyy-MM-dd HH:mm:ss')} + ' UTC'">…</dd>
+                      restore.startedAt.atZone(consoleZone),
+                      'yyyy-MM-dd HH:mm:ss')} + ' ' + ${consoleZoneLabel}">…</dd>
 
       <dt th:text="#{backup.finished}">Finished</dt>
       <dd class="mono" th:if="${restore.finishedAt == null}">—</dd>
       <dd class="mono" th:unless="${restore.finishedAt == null}"
           th:text="${#temporals.format(
-                      restore.finishedAt.atOffset(T(java.time.ZoneOffset).UTC),
-                      'yyyy-MM-dd HH:mm:ss')} + ' UTC'">…</dd>
+                      restore.finishedAt.atZone(consoleZone),
+                      'yyyy-MM-dd HH:mm:ss')} + ' ' + ${consoleZoneLabel}">…</dd>
     </dl>
   </div>
 

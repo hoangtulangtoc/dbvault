@@ -29,7 +29,8 @@ public class ByteSizes {
         }
         double value = bytes;
         int unit = -1;
-        while (value >= 1024 && unit < UNITS.length - 1) {
+        // 1023.95 and up shows as 1024.0 once rounded, so it belongs to the next unit already.
+        while (value >= 1023.95 && unit < UNITS.length - 1) {
             value /= 1024;
             unit++;
         }

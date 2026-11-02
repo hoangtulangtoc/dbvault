@@ -38,13 +38,20 @@ public class VerificationApiController {
     ResponseEntity<VerificationView> start(@PathVariable UUID id) {
         UUID started = verification.start(id);
         VerificationView view = verifications.findById(started).map(VerificationView::of).orElseThrow();
-        return ResponseEntity.accepted().location(URI.create("/api/v1/verifications/" + started)).body(view);
+        return ResponseEntity.accepted().location(URI.create(path(id, started))).body(view);
     }
 
-    @GetMapping("/verifications/{id}")
-    VerificationView get(@PathVariable UUID id) {
-        return verifications.findById(id).map(VerificationView::of)
-                .orElseThrow(() -> new NoSuchElementException("No restore verification with id " + id));
+    /** One attempt, under the backup it verifies; an attempt of another backup is a {@code 404}. */
+    @GetMapping("/backups/{backupId}/verifications/{id}")
+    VerificationView get(@PathVariable UUID backupId, @PathVariable UUID id) {
+        return verifications.findById(id).filter(attempt -> attempt.getBackupExecutionId().equals(backupId))
+                .map(VerificationView::of)
+                .orElseThrow(() -> new NoSuchElementException(
+                        "No restore verification with id " + id + " for backup " + backupId));
+    }
+
+    private static String path(UUID backupId, UUID id) {
+        return "/api/v1/backups/" + backupId + "/verifications/" + id;
     }
 
     @ExceptionHandler(NoSuchElementException.class)

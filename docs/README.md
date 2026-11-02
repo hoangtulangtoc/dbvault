@@ -8,6 +8,8 @@
   operator has to decide.
 - [upgrading-to-1.0.md](upgrading-to-1.0.md) — from 0.3 to 1.0: the TLS
   requirement on existing targets, and going back.
+- [upgrading-to-1.2.md](upgrading-to-1.2.md) — from 1.1 to 1.2: the removed
+  verification path, upgrading dbvault-cli with the server, and going back.
 - [api.md](api.md) — the HTTP API under `/api/v1` for scripts and dbvault-cli.
 - [licences.md](licences.md) — the third-party licence report the build puts in
   the application jar.

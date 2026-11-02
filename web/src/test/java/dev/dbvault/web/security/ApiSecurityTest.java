@@ -83,6 +83,23 @@ class ApiSecurityTest {
     }
 
     @Test
+    void anAddressThatKeepsGuessingGets429WithoutAPasswordCheck() throws Exception {
+        for (int i = 0; i < 10; i++) {
+            mockMvc.perform(get("/api/v1/targets").with(httpBasic("operator", "wrong " + i)).with(request -> {
+                request.setRemoteAddr("203.0.113.9");
+                return request;
+            })).andExpect(status().isUnauthorized());
+        }
+        mockMvc.perform(get("/api/v1/targets").with(httpBasic("operator", PASSWORD)).with(request -> {
+                    request.setRemoteAddr("203.0.113.9");
+                    return request;
+                }))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(header().string("Retry-After", "900"))
+                .andExpect(jsonPath("$.error").value("Too many failed sign-ins from this address; try again later"));
+    }
+
+    @Test
     void listsTargetsWithoutTheirPassword() throws Exception {
         when(targets.listAll()).thenReturn(List.of(shop()));
 
@@ -147,7 +164,7 @@ class ApiSecurityTest {
 
         mockMvc.perform(post("/api/v1/backups/{id}/verifications", backup).with(httpBasic("operator", PASSWORD)))
                 .andExpect(status().isAccepted())
-                .andExpect(header().string("Location", "/api/v1/verifications/" + attempt))
+                .andExpect(header().string("Location", "/api/v1/backups/" + backup + "/verifications/" + attempt))
                 .andExpect(header().doesNotExist("Set-Cookie"))
                 .andExpect(jsonPath("$.status").value("RUNNING"))
                 .andExpect(jsonPath("$.backupId").value(backup.toString()));
@@ -165,8 +182,37 @@ class ApiSecurityTest {
     }
 
     @Test
+    void followsAnAttemptUnderItsBackup() throws Exception {
+        UUID backup = UUID.randomUUID();
+        UUID attempt = UUID.randomUUID();
+        when(verifications.findById(attempt)).thenReturn(Optional.of(
+                RestoreVerificationExecution.started(attempt, backup, CREATED)));
+
+        mockMvc.perform(get("/api/v1/backups/{b}/verifications/{id}", backup, attempt).with(httpBasic("operator", PASSWORD)))
+                .andExpect(status().isOk())
+                .andExpect(header().doesNotExist("Deprecation"))
+                .andExpect(jsonPath("$.status").value("RUNNING"));
+        mockMvc.perform(get("/api/v1/backups/{b}/verifications/{id}", UUID.randomUUID(), attempt)
+                        .with(httpBasic("operator", PASSWORD)))
+                .andExpect(status().isNotFound());
+    }
+
+    /** Removed in 1.2.0: an attempt is followed only under its backup. */
+    @Test
+    void theOldVerificationPathIsGone() throws Exception {
+        UUID backup = UUID.randomUUID();
+        UUID attempt = UUID.randomUUID();
+        when(verifications.findById(attempt)).thenReturn(Optional.of(
+                RestoreVerificationExecution.started(attempt, backup, CREATED)));
+
+        mockMvc.perform(get("/api/v1/verifications/{id}", attempt).with(httpBasic("operator", PASSWORD)))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
     void anUnknownVerificationIsA404() throws Exception {
-        mockMvc.perform(get("/api/v1/verifications/{id}", UUID.randomUUID()).with(httpBasic("operator", PASSWORD)))
+        mockMvc.perform(get("/api/v1/backups/{b}/verifications/{id}", UUID.randomUUID(), UUID.randomUUID())
+                        .with(httpBasic("operator", PASSWORD)))
                 .andExpect(status().isNotFound());
     }
 

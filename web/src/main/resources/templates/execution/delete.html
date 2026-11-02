@@ -42,8 +42,8 @@
       <dt th:text="#{backupDelete.taken}">Taken</dt>
       <dd class="mono"
           th:text="${#temporals.format(
-                      preview.execution().startedAt.atOffset(T(java.time.ZoneOffset).UTC),
-                      'yyyy-MM-dd HH:mm:ss')} + ' UTC'">…</dd>
+                      preview.execution().startedAt.atZone(consoleZone),
+                      'yyyy-MM-dd HH:mm:ss')} + ' ' + ${consoleZoneLabel}">…</dd>
 
       <dt th:text="#{backups.col.status}">Status</dt>
       <dd th:insert="~{fragments/execution-status :: statusBadge(${preview.execution().status})}"></dd>

@@ -1,5 +1,7 @@
 package dev.dbvault.web.controller;
 
+import java.time.Instant;
+import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.UUID;
@@ -17,6 +19,7 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import dev.dbvault.application.retention.ManageBackupRetentionService;
 import dev.dbvault.core.exception.InvalidRetentionPolicyException;
+import dev.dbvault.core.model.BackupExecution;
 import dev.dbvault.core.model.BackupRetentionPolicy;
 import dev.dbvault.core.model.DatabaseTarget;
 import dev.dbvault.web.dto.BackupRetentionPolicyForm;
@@ -84,6 +87,34 @@ public class BackupRetentionController {
             }
             return formView(model, target, retention.findForTarget(targetId).orElse(null));
         }
+    }
+
+    /** Shows what the policy in the form would delete if it ran now. Saves nothing and deletes nothing. */
+    @PostMapping("/{targetId}/preview")
+    String preview(
+            @PathVariable UUID targetId,
+            @Valid @ModelAttribute("form") BackupRetentionPolicyForm form,
+            BindingResult binding,
+            Model model,
+            RedirectAttributes flash) {
+
+        DatabaseTarget target;
+        try {
+            target = retention.getTarget(targetId);
+        } catch (NoSuchElementException e) {
+            return targetGone(flash);
+        }
+        if (!binding.hasErrors()) {
+            List<BackupExecution> deleted = retention.preview(targetId, form.getKeepSuccessful());
+            model.addAttribute("preview", new Preview(form.getKeepSuccessful(), deleted.size(),
+                    deleted.isEmpty() ? null : deleted.getFirst().getStartedAt(),
+                    deleted.isEmpty() ? null : deleted.getLast().getStartedAt()));
+        }
+        return formView(model, target, retention.findForTarget(targetId).orElse(null));
+    }
+
+    /** {@code oldest} and {@code newest} are the start times of the first and last backup that would go. */
+    record Preview(int keep, int count, Instant oldest, Instant newest) {
     }
 
     @PostMapping("/{targetId}/disable")
