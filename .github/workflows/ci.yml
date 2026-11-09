@@ -58,6 +58,17 @@ jobs:
           S3_TEST_SECRET_KEY: ${{ secrets.S3_TEST_SECRET_KEY }}
         run: mvn --batch-mode --no-transfer-progress verify
 
+      # The log alone rarely says why an integration test failed; the reports go with the runner.
+      - name: Upload the test reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: |
+            **/target/surefire-reports
+            **/target/failsafe-reports
+          retention-days: 7
+
   workflow-lint:
     name: workflow lint
     runs-on: ubuntu-latest
