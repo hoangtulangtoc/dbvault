@@ -1,6 +1,7 @@
 package dev.dbvault.web.controller;
 
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.not;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -332,6 +333,22 @@ class RestoreControllerTest {
                 .andExpect(content().string(containsString("ERROR 1142 at line 40")))
                 .andExpect(content().string(containsString("production")))
                 .andExpect(content().string(containsString("data-live-active=\"false\"")));
+    }
+
+    /** The restore's own page, like the list, says the backup was deleted rather than calling it a removed target. */
+    @Test
+    void theDetailSaysWhenTheBackupARestoreCameFromWasDeleted() throws Exception {
+        RestoreExecution restore = RestoreExecution.started(UUID.randomUUID(), BACKUP_ID, TARGET_ID, STARTED)
+                .succeeded(STARTED.plusSeconds(30));
+        when(restores.findById(restore.getId())).thenReturn(Optional.of(restore));
+        when(backups.findById(BACKUP_ID)).thenReturn(Optional.empty());
+        when(targets.listAll()).thenReturn(List.of(target()));
+
+        mockMvc.perform(get("/restores/{id}", restore.getId()))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("Backup deleted since")))
+                .andExpect(content().string(containsString("Not known: the backup was deleted")))
+                .andExpect(content().string(not(containsString("(removed)"))));
     }
 
     /** Followed until it finishes, like a running backup (ADR-010). */
