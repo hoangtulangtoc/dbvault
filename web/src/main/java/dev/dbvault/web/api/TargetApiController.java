@@ -2,7 +2,9 @@ package dev.dbvault.web.api;
 
 import java.time.Instant;
 import java.util.Comparator;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.UUID;
@@ -13,11 +15,13 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import dev.dbvault.application.target.ManageDatabaseTargetService;
 import dev.dbvault.core.model.BackupExecution;
 import dev.dbvault.core.model.DatabaseTarget;
+import dev.dbvault.core.model.ExecutionStatus;
 import dev.dbvault.core.port.BackupExecutionRepository;
 
 import lombok.RequiredArgsConstructor;
@@ -43,15 +47,38 @@ public class TargetApiController {
         return targets.listAll().stream().map(TargetView::of).toList();
     }
 
+    /** {@code status}, in any case, keeps only the backups in that state; without it, every backup. */
     @GetMapping("/{id}/backups")
-    List<BackupView> backups(@PathVariable UUID id) {
+    List<BackupView> backups(@PathVariable UUID id, @RequestParam(required = false) String status) {
+        ExecutionStatus only = status == null ? null : parse(status);
         if (targets.listAll().stream().noneMatch(target -> target.getId().equals(id))) {
             throw new NoSuchElementException("No target with id " + id);
         }
         return executions.findAllForTarget(id).stream()
+                .filter(execution -> only == null || execution.getStatus() == only)
                 .sorted(Comparator.comparing(BackupExecution::getStartedAt).reversed())
                 .map(BackupView::of)
                 .toList();
+    }
+
+    private static ExecutionStatus parse(String status) {
+        try {
+            return ExecutionStatus.valueOf(status.trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException unknown) {
+            throw new UnknownStatusException("Unknown status '" + status + "'; use one of "
+                    + String.join(", ", Arrays.stream(ExecutionStatus.values()).map(Enum::name).toList()));
+        }
+    }
+
+    @ExceptionHandler(UnknownStatusException.class)
+    ResponseEntity<Map<String, String>> badStatus(UnknownStatusException unknown) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", unknown.getMessage()));
+    }
+
+    private static final class UnknownStatusException extends RuntimeException {
+        UnknownStatusException(String message) {
+            super(message);
+        }
     }
 
     @ExceptionHandler(NoSuchElementException.class)
