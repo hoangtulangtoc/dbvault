@@ -36,6 +36,7 @@
             <th scope="col" th:text="#{backups.col.started}">Started</th>
             <th scope="col" th:text="#{backups.col.target}">Target</th>
             <th scope="col" th:text="#{backups.col.status}">Status</th>
+            <th scope="col" th:text="#{backups.col.duration}">Duration</th>
             <th scope="col" th:text="#{backups.col.size}">Size</th>
             <th scope="col"><span class="visually-hidden" th:text="#{targets.col.actions}">Actions</span></th>
           </tr>
@@ -59,6 +60,7 @@
             <!-- th:insert, not th:replace: replace would swap out the <td> itself
                  and leave the badge loose in the row. -->
             <td th:data-label="#{backups.col.status}" th:insert="~{fragments/execution-status :: statusBadge(${execution.status})}"></td>
+            <td th:data-label="#{backups.col.duration}" class="mono" th:text="${durations.readable(execution.startedAt, execution.finishedAt)}">—</td>
             <td th:data-label="#{backups.col.size}" class="mono" th:text="${byteSizes.readable(execution.sizeBytes)}">—</td>
             <td class="actions">
               <div class="row-actions">

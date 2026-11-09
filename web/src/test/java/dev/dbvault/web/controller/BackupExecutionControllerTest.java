@@ -113,7 +113,8 @@ class BackupExecutionControllerTest {
         mockMvc.perform(get("/executions"))
                 .andExpect(content().string(containsString(
                         "<td data-label=\"Status\"><span class=\"badge badge-success\">Succeeded</span></td>")))
-                // Which is also what keeps the size in the size column.
+                // Which is also what keeps the duration and the size in their own columns.
+                .andExpect(content().string(containsString("<td data-label=\"Duration\" class=\"mono\">1 min 30 s</td>")))
                 .andExpect(content().string(containsString("<td data-label=\"Size\" class=\"mono\">8.0 KB</td>")));
     }
 
