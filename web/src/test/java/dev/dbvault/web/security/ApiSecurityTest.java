@@ -11,6 +11,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.time.Instant;
 import java.util.List;
+import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -22,6 +23,7 @@ import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import dev.dbvault.application.retention.ManageBackupRetentionService;
 import dev.dbvault.application.target.ManageDatabaseTargetService;
 import dev.dbvault.application.verification.RestoreVerificationService;
 import dev.dbvault.core.model.BackupExecution;
@@ -30,10 +32,11 @@ import dev.dbvault.core.model.DatabaseTarget;
 import dev.dbvault.core.model.RestoreVerificationExecution;
 import dev.dbvault.core.port.BackupExecutionRepository;
 import dev.dbvault.core.port.RestoreVerificationExecutionRepository;
+import dev.dbvault.web.api.RetentionApiController;
 import dev.dbvault.web.api.TargetApiController;
 import dev.dbvault.web.api.VerificationApiController;
 
-@WebMvcTest({ TargetApiController.class, VerificationApiController.class })
+@WebMvcTest({ TargetApiController.class, VerificationApiController.class, RetentionApiController.class })
 @Import({ ApiSecurityConfig.class, SecurityConfig.class, OperatorAccountConfig.class })
 @TestPropertySource(properties = {
         "dbvault.operator.username=operator",
@@ -59,6 +62,9 @@ class ApiSecurityTest {
 
     @MockitoBean
     private RestoreVerificationService verification;
+
+    @MockitoBean
+    private ManageBackupRetentionService retention;
 
     @MockitoBean
     private RestoreVerificationExecutionRepository verifications;
@@ -113,6 +119,26 @@ class ApiSecurityTest {
     }
 
     @Test
+    void readsOneTargetByItsIdWithoutItsPassword() throws Exception {
+        when(targets.listAll()).thenReturn(List.of(shop()));
+
+        mockMvc.perform(get("/api/v1/targets/{id}", SHOP).with(httpBasic("operator", PASSWORD)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(SHOP.toString()))
+                .andExpect(jsonPath("$.password").doesNotExist())
+                .andExpect(jsonPath("$.passwordCiphertext").doesNotExist());
+    }
+
+    @Test
+    void readingAnUnknownTargetIsA404() throws Exception {
+        when(targets.listAll()).thenReturn(List.of(shop()));
+
+        mockMvc.perform(get("/api/v1/targets/{id}", UUID.randomUUID()).with(httpBasic("operator", PASSWORD)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error").exists());
+    }
+
+    @Test
     void listsOneTargetsBackupsNewestFirstWithoutTheirPath() throws Exception {
         BackupExecution newer = BackupExecution.started(UUID.randomUUID(), SHOP, CREATED.plusSeconds(120))
                 .succeeded("/backups/shop.sql.gz", 2048, SHA256, CREATED.plusSeconds(130));
@@ -131,6 +157,33 @@ class ApiSecurityTest {
                 .andExpect(jsonPath("$[1].error").value("Access denied"));
     }
 
+    /** A monitoring script asks for the failed backups only, in whatever case it writes the status. */
+    @Test
+    void filtersOneTargetsBackupsByStatusInAnyCase() throws Exception {
+        BackupExecution good = BackupExecution.started(UUID.randomUUID(), SHOP, CREATED.plusSeconds(120))
+                .succeeded("/backups/shop.sql.gz", 2048, SHA256, CREATED.plusSeconds(130));
+        BackupExecution bad = BackupExecution.started(UUID.randomUUID(), SHOP, CREATED.plusSeconds(60))
+                .failed("Access denied", CREATED.plusSeconds(61));
+        when(targets.listAll()).thenReturn(List.of(shop()));
+        when(executions.findAllForTarget(SHOP)).thenReturn(List.of(bad, good));
+
+        mockMvc.perform(get("/api/v1/targets/{id}/backups", SHOP).param("status", "failed")
+                        .with(httpBasic("operator", PASSWORD)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].status").value("FAILED"));
+    }
+
+    @Test
+    void anUnknownStatusIsA400ThatNamesTheAcceptedOnes() throws Exception {
+        when(targets.listAll()).thenReturn(List.of(shop()));
+
+        mockMvc.perform(get("/api/v1/targets/{id}/backups", SHOP).param("status", "broken")
+                        .with(httpBasic("operator", PASSWORD)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("Unknown status 'broken'; use one of RUNNING, SUCCEEDED, FAILED"));
+    }
+
     @Test
     void anUnknownTargetIsA404() throws Exception {
         when(targets.listAll()).thenReturn(List.of(shop()));
@@ -138,6 +191,42 @@ class ApiSecurityTest {
         mockMvc.perform(get("/api/v1/targets/{id}/backups", UUID.randomUUID()).with(httpBasic("operator", PASSWORD)))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error").exists());
+    }
+
+    /** The console's Preview, for scripts: newest first, and nothing is deleted. */
+    @Test
+    void previewsWhatARetentionPolicyWouldDeleteNewestFirst() throws Exception {
+        BackupExecution older = BackupExecution.started(UUID.randomUUID(), SHOP, CREATED)
+                .succeeded("/backups/shop-1.sql.gz", 1024, SHA256, CREATED.plusSeconds(10));
+        BackupExecution newer = BackupExecution.started(UUID.randomUUID(), SHOP, CREATED.plusSeconds(3600))
+                .succeeded("/backups/shop-2.sql.gz", 2048, SHA256, CREATED.plusSeconds(3610));
+        when(retention.preview(SHOP, 3)).thenReturn(List.of(older, newer));
+
+        mockMvc.perform(get("/api/v1/targets/{id}/retention/preview", SHOP).param("keep", "3")
+                        .with(httpBasic("operator", PASSWORD)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[0].sizeBytes").value(2048))
+                .andExpect(jsonPath("$[1].sizeBytes").value(1024))
+                .andExpect(jsonPath("$[0].artifactPath").doesNotExist());
+    }
+
+    @Test
+    void aRetentionPreviewKeepingNothingIsA400() throws Exception {
+        mockMvc.perform(get("/api/v1/targets/{id}/retention/preview", SHOP).param("keep", "0")
+                        .with(httpBasic("operator", PASSWORD)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("keep must be 1 or more, not 0"));
+    }
+
+    @Test
+    void aRetentionPreviewOfAnUnknownTargetIsA404() throws Exception {
+        UUID unknown = UUID.randomUUID();
+        when(retention.preview(unknown, 3)).thenThrow(new NoSuchElementException("No database target with id " + unknown));
+
+        mockMvc.perform(get("/api/v1/targets/{id}/retention/preview", unknown).param("keep", "3")
+                        .with(httpBasic("operator", PASSWORD)))
+                .andExpect(status().isNotFound());
     }
 
     @Test
