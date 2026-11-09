@@ -36,7 +36,7 @@
       <dd th:text="${targetName != null ? targetName : #messages.msg('backups.removedTarget')}">production</dd>
 
       <dt th:text="#{restores.col.from}">From backup</dt>
-      <dd th:if="${backup == null}" th:text="#{backups.removedTarget}">(removed)</dd>
+      <dd th:if="${backup == null}" th:text="#{restores.backupGone}">Backup deleted since</dd>
       <dd class="mono" th:unless="${backup == null}">
         <a th:href="@{/executions/{id}(id=${backup.id})}"
            th:text="${#temporals.format(
@@ -47,7 +47,7 @@
       <!-- Not always the target above: a restore can go into any target
            (ADR-014), so where the backup was taken is said separately. -->
       <dt th:text="#{restore.takenFrom}">Taken from</dt>
-      <dd th:text="${backup == null ? '—' : (sourceName != null ? sourceName : #messages.msg('backups.removedTarget'))}">production</dd>
+      <dd th:text="${backup == null ? #messages.msg('restore.takenFrom.unknown') : (sourceName != null ? sourceName : #messages.msg('backups.removedTarget'))}">production</dd>
 
       <dt th:text="#{backups.col.started}">Started</dt>
       <dd class="mono"
