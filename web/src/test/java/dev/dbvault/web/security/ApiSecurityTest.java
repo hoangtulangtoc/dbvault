@@ -131,6 +131,33 @@ class ApiSecurityTest {
                 .andExpect(jsonPath("$[1].error").value("Access denied"));
     }
 
+    /** A monitoring script asks for the failed backups only, in whatever case it writes the status. */
+    @Test
+    void filtersOneTargetsBackupsByStatusInAnyCase() throws Exception {
+        BackupExecution good = BackupExecution.started(UUID.randomUUID(), SHOP, CREATED.plusSeconds(120))
+                .succeeded("/backups/shop.sql.gz", 2048, SHA256, CREATED.plusSeconds(130));
+        BackupExecution bad = BackupExecution.started(UUID.randomUUID(), SHOP, CREATED.plusSeconds(60))
+                .failed("Access denied", CREATED.plusSeconds(61));
+        when(targets.listAll()).thenReturn(List.of(shop()));
+        when(executions.findAllForTarget(SHOP)).thenReturn(List.of(bad, good));
+
+        mockMvc.perform(get("/api/v1/targets/{id}/backups", SHOP).param("status", "failed")
+                        .with(httpBasic("operator", PASSWORD)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].status").value("FAILED"));
+    }
+
+    @Test
+    void anUnknownStatusIsA400ThatNamesTheAcceptedOnes() throws Exception {
+        when(targets.listAll()).thenReturn(List.of(shop()));
+
+        mockMvc.perform(get("/api/v1/targets/{id}/backups", SHOP).param("status", "broken")
+                        .with(httpBasic("operator", PASSWORD)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("Unknown status 'broken'; use one of RUNNING, SUCCEEDED, FAILED"));
+    }
+
     @Test
     void anUnknownTargetIsA404() throws Exception {
         when(targets.listAll()).thenReturn(List.of(shop()));
