@@ -47,6 +47,16 @@ public class TargetApiController {
         return targets.listAll().stream().map(TargetView::of).toList();
     }
 
+    /** One target, with the same fields as the list; an unknown ID is a 404. */
+    @GetMapping("/{id}")
+    TargetView get(@PathVariable UUID id) {
+        return targets.listAll().stream()
+                .filter(target -> target.getId().equals(id))
+                .findFirst()
+                .map(TargetView::of)
+                .orElseThrow(() -> new NoSuchElementException("No target with id " + id));
+    }
+
     /** {@code status}, in any case, keeps only the backups in that state; without it, every backup. */
     @GetMapping("/{id}/backups")
     List<BackupView> backups(@PathVariable UUID id, @RequestParam(required = false) String status) {

@@ -119,6 +119,26 @@ class ApiSecurityTest {
     }
 
     @Test
+    void readsOneTargetByItsIdWithoutItsPassword() throws Exception {
+        when(targets.listAll()).thenReturn(List.of(shop()));
+
+        mockMvc.perform(get("/api/v1/targets/{id}", SHOP).with(httpBasic("operator", PASSWORD)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(SHOP.toString()))
+                .andExpect(jsonPath("$.password").doesNotExist())
+                .andExpect(jsonPath("$.passwordCiphertext").doesNotExist());
+    }
+
+    @Test
+    void readingAnUnknownTargetIsA404() throws Exception {
+        when(targets.listAll()).thenReturn(List.of(shop()));
+
+        mockMvc.perform(get("/api/v1/targets/{id}", UUID.randomUUID()).with(httpBasic("operator", PASSWORD)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error").exists());
+    }
+
+    @Test
     void listsOneTargetsBackupsNewestFirstWithoutTheirPath() throws Exception {
         BackupExecution newer = BackupExecution.started(UUID.randomUUID(), SHOP, CREATED.plusSeconds(120))
                 .succeeded("/backups/shop.sql.gz", 2048, SHA256, CREATED.plusSeconds(130));
