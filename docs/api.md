@@ -10,6 +10,7 @@ under `/api/v1` ([ADR-039](adr/039-http-api-is-versioned-under-api-v1.md)).
 | `GET /api/v1/targets/{id}/backups` | One target's backups, newest first, without their path on the server |
 | `POST /api/v1/backups/{id}/verifications` | `202` and the new restore-verification attempt; `Location` is where to follow it |
 | `GET /api/v1/backups/{backupId}/verifications/{id}` | One attempt: `status` is `RUNNING`, `SUCCEEDED` or `FAILED`; `404` when it belongs to another backup |
+| `GET /api/v1/targets/{id}/retention/preview?keep=N` | The backups a retention policy keeping `N` successful backups would delete if it ran now, newest first; deletes nothing. `keep` below 1 is a `400` |
 
 Errors are `{"error": "..."}`: `401` without valid credentials, `404` for an
 unknown target, backup or attempt, `409` when a verification cannot start.
