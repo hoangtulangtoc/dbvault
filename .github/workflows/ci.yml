@@ -52,6 +52,17 @@ jobs:
           test -x /usr/bin/mongodump
           test -x /usr/bin/mongorestore
 
+      # Nothing above pins a version, so the log says which ones this run tested against.
+      - name: Print the database client versions
+        run: |
+          pg_dump --version
+          pg_restore --version
+          psql --version
+          mysqldump --version
+          mysql --version
+          mongodump --version
+          mongorestore --version
+
       - name: Verify
         env:
           S3_TEST_ACCESS_KEY: ${{ secrets.S3_TEST_ACCESS_KEY }}
