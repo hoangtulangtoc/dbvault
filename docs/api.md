@@ -23,6 +23,26 @@ curl -u admin https://dbvault.example.com/api/v1/targets
 curl -u admin -X POST https://dbvault.example.com/api/v1/backups/<backup-id>/verifications
 ```
 
+## Previewing a retention policy
+
+Before lowering how many backups a target keeps, ask what the new number would delete. The
+preview reads the same list retention acts on after a successful backup, and deletes nothing:
+
+```sh
+curl -u admin "https://dbvault.example.com/api/v1/targets/<target-id>/retention/preview?keep=7"
+```
+
+```json
+[
+  {"id": "0b6f…", "status": "SUCCEEDED", "startedAt": "2026-11-08T01:00:00Z", "finishedAt": "2026-11-08T01:00:41Z", "sizeBytes": 61301298},
+  {"id": "9c1d…", "status": "SUCCEEDED", "startedAt": "2026-11-07T01:00:00Z", "finishedAt": "2026-11-07T01:00:39Z", "sizeBytes": 61287004}
+]
+```
+
+An empty list means keeping that many would delete nothing. Only successful backups count
+towards `keep`. The answer is true at the moment it is given: retention runs after each
+successful backup, so the next one to finish can change what is deleted.
+
 The unversioned `/api/targets` paths of dbvault 0.2 are gone: they answer `404`.
 
 `GET /api/v1/verifications/{id}` is gone since dbvault 1.2.0 and answers `404`: follow an
