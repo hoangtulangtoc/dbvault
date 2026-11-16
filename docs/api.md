@@ -8,7 +8,7 @@ under `/api/v1` ([ADR-039](adr/039-http-api-is-versioned-under-api-v1.md)).
 | --- | --- |
 | `GET /api/v1/targets` | Every target, without its password; `tlsRequired` is `false` for a target that opted out of TLS |
 | `GET /api/v1/targets/{id}` | One target, with the same fields as the list; `404` for an unknown ID |
-| `GET /api/v1/targets/{id}/backups` | One target's backups, newest first, without their path on the server; `?status=FAILED` (or `RUNNING`, `SUCCEEDED`, any case) keeps only those, and an unknown status is a `400` |
+| `GET /api/v1/targets/{id}/backups` | One target's backups, newest first, without their path on the server; `?status=FAILED` (or `RUNNING`, `SUCCEEDED`, any case) keeps only those, and an unknown status is a `400`; `?limit=N` keeps the newest `N` of them, and a limit below 1 is a `400` |
 | `POST /api/v1/backups/{id}/verifications` | `202` and the new restore-verification attempt; `Location` is where to follow it |
 | `GET /api/v1/backups/{backupId}/verifications/{id}` | One attempt: `status` is `RUNNING`, `SUCCEEDED` or `FAILED`; `404` when it belongs to another backup |
 | `GET /api/v1/targets/{id}/retention/preview?keep=N` | The backups a retention policy keeping `N` successful backups would delete if it ran now, newest first; deletes nothing. `keep` below 1 is a `400` |
