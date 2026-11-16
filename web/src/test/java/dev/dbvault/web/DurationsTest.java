@@ -14,13 +14,20 @@ class DurationsTest {
 
     @Test
     void readsLikeAPersonWould() {
-        assertThat(durations.readable(START, START)).isEqualTo("0 s");
+        assertThat(durations.readable(START, START.plusSeconds(1))).isEqualTo("1 s");
         assertThat(durations.readable(START, START.plusSeconds(59))).isEqualTo("59 s");
         assertThat(durations.readable(START, START.plusSeconds(60))).isEqualTo("1 min");
         assertThat(durations.readable(START, START.plusSeconds(90))).isEqualTo("1 min 30 s");
         assertThat(durations.readable(START, START.plusSeconds(3599))).isEqualTo("59 min 59 s");
         assertThat(durations.readable(START, START.plusSeconds(3600))).isEqualTo("1 h");
         assertThat(durations.readable(START, START.plusSeconds(7 * 3600 + 5 * 60 + 9))).isEqualTo("7 h 5 min");
+    }
+
+    /** A small dump finishes within the second it started in; "0 s" read as if it had not run. */
+    @Test
+    void lessThanASecondDoesNotShowZero() {
+        assertThat(durations.readable(START, START)).isEqualTo("under 1 s");
+        assertThat(durations.readable(START, START.plusMillis(999))).isEqualTo("under 1 s");
     }
 
     /** A running backup has no finish time yet; a clock step back must not print a negative time. */
