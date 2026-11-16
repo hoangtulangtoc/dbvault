@@ -9,7 +9,8 @@ import org.springframework.web.bind.annotation.ModelAttribute;
 /**
  * How long a job took, for the templates: {@code ${durations.readable(startedAt, finishedAt)}}.
  * Seconds under a minute, minutes and seconds under an hour, hours and minutes after that; a job
- * without a finish time has no duration yet. Offered to every page like {@link ByteSizes}.
+ * without a finish time has no duration yet, and one that took less than a second says so rather
+ * than showing a zero. Offered to every page like {@link ByteSizes}.
  */
 @ControllerAdvice
 public class Durations {
@@ -24,6 +25,9 @@ public class Durations {
             return "—";
         }
         long seconds = Duration.between(startedAt, finishedAt).toSeconds();
+        if (seconds == 0) {
+            return "under 1 s";
+        }
         if (seconds < 60) {
             return seconds + " s";
         }
