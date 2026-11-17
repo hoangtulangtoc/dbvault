@@ -57,16 +57,25 @@ public class TargetApiController {
                 .orElseThrow(() -> new NoSuchElementException("No target with id " + id));
     }
 
-    /** {@code status}, in any case, keeps only the backups in that state; without it, every backup. */
+    /**
+     * {@code status}, in any case, keeps only the backups in that state; without it, every backup.
+     * {@code limit} keeps the newest that many of what the status filter left, so a script that only
+     * wants the latest backups does not download the whole history.
+     */
     @GetMapping("/{id}/backups")
-    List<BackupView> backups(@PathVariable UUID id, @RequestParam(required = false) String status) {
+    List<BackupView> backups(@PathVariable UUID id, @RequestParam(required = false) String status,
+            @RequestParam(required = false) Integer limit) {
         ExecutionStatus only = status == null ? null : parse(status);
+        if (limit != null && limit < 1) {
+            throw new BadParameterException("limit must be 1 or more, not " + limit);
+        }
         if (targets.listAll().stream().noneMatch(target -> target.getId().equals(id))) {
             throw new NoSuchElementException("No target with id " + id);
         }
         return executions.findAllForTarget(id).stream()
                 .filter(execution -> only == null || execution.getStatus() == only)
                 .sorted(Comparator.comparing(BackupExecution::getStartedAt).reversed())
+                .limit(limit == null ? Long.MAX_VALUE : limit)
                 .map(BackupView::of)
                 .toList();
     }
@@ -75,18 +84,18 @@ public class TargetApiController {
         try {
             return ExecutionStatus.valueOf(status.trim().toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException unknown) {
-            throw new UnknownStatusException("Unknown status '" + status + "'; use one of "
+            throw new BadParameterException("Unknown status '" + status + "'; use one of "
                     + String.join(", ", Arrays.stream(ExecutionStatus.values()).map(Enum::name).toList()));
         }
     }
 
-    @ExceptionHandler(UnknownStatusException.class)
-    ResponseEntity<Map<String, String>> badStatus(UnknownStatusException unknown) {
+    @ExceptionHandler(BadParameterException.class)
+    ResponseEntity<Map<String, String>> badStatus(BadParameterException unknown) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", unknown.getMessage()));
     }
 
-    private static final class UnknownStatusException extends RuntimeException {
-        UnknownStatusException(String message) {
+    private static final class BadParameterException extends RuntimeException {
+        BadParameterException(String message) {
             super(message);
         }
     }

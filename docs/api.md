@@ -8,7 +8,7 @@ under `/api/v1` ([ADR-039](adr/039-http-api-is-versioned-under-api-v1.md)).
 | --- | --- |
 | `GET /api/v1/targets` | Every target, without its password; `tlsRequired` is `false` for a target that opted out of TLS |
 | `GET /api/v1/targets/{id}` | One target, with the same fields as the list; `404` for an unknown ID |
-| `GET /api/v1/targets/{id}/backups` | One target's backups, newest first, without their path on the server; `?status=FAILED` (or `RUNNING`, `SUCCEEDED`, any case) keeps only those, and an unknown status is a `400` |
+| `GET /api/v1/targets/{id}/backups` | One target's backups, newest first, without their path on the server; `?status=FAILED` (or `RUNNING`, `SUCCEEDED`, any case) keeps only those, and an unknown status is a `400`; `?limit=N` keeps the newest `N` of them, and a limit below 1 is a `400` |
 | `POST /api/v1/backups/{id}/verifications` | `202` and the new restore-verification attempt; `Location` is where to follow it |
 | `GET /api/v1/backups/{backupId}/verifications/{id}` | One attempt: `status` is `RUNNING`, `SUCCEEDED` or `FAILED`; `404` when it belongs to another backup |
 | `GET /api/v1/targets/{id}/retention/preview?keep=N` | The backups a retention policy keeping `N` successful backups would delete if it ran now, newest first; deletes nothing. `keep` below 1 is a `400` |
@@ -22,6 +22,26 @@ Restore verification must be enabled for the deployment; see
 curl -u admin https://dbvault.example.com/api/v1/targets
 curl -u admin -X POST https://dbvault.example.com/api/v1/backups/<backup-id>/verifications
 ```
+
+## Previewing a retention policy
+
+Before lowering how many backups a target keeps, ask what the new number would delete. The
+preview reads the same list retention acts on after a successful backup, and deletes nothing:
+
+```sh
+curl -u admin "https://dbvault.example.com/api/v1/targets/<target-id>/retention/preview?keep=7"
+```
+
+```json
+[
+  {"id": "0b6f…", "status": "SUCCEEDED", "startedAt": "2026-11-08T01:00:00Z", "finishedAt": "2026-11-08T01:00:41Z", "sizeBytes": 61301298},
+  {"id": "9c1d…", "status": "SUCCEEDED", "startedAt": "2026-11-07T01:00:00Z", "finishedAt": "2026-11-07T01:00:39Z", "sizeBytes": 61287004}
+]
+```
+
+An empty list means keeping that many would delete nothing. Only successful backups count
+towards `keep`. The answer is true at the moment it is given: retention runs after each
+successful backup, so the next one to finish can change what is deleted.
 
 The unversioned `/api/targets` paths of dbvault 0.2 are gone: they answer `404`.
 

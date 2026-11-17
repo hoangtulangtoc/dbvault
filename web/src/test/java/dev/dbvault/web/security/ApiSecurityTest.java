@@ -184,6 +184,40 @@ class ApiSecurityTest {
                 .andExpect(jsonPath("$.error").value("Unknown status 'broken'; use one of RUNNING, SUCCEEDED, FAILED"));
     }
 
+    /** A dashboard asks for the latest backups only; the limit applies after the status filter. */
+    @Test
+    void aLimitKeepsTheNewestBackups() throws Exception {
+        BackupExecution oldest = BackupExecution.started(UUID.randomUUID(), SHOP, CREATED)
+                .succeeded("/backups/shop-1.sql.gz", 1024, SHA256, CREATED.plusSeconds(10));
+        BackupExecution failed = BackupExecution.started(UUID.randomUUID(), SHOP, CREATED.plusSeconds(60))
+                .failed("Access denied", CREATED.plusSeconds(61));
+        BackupExecution newest = BackupExecution.started(UUID.randomUUID(), SHOP, CREATED.plusSeconds(120))
+                .succeeded("/backups/shop-2.sql.gz", 2048, SHA256, CREATED.plusSeconds(130));
+        when(targets.listAll()).thenReturn(List.of(shop()));
+        when(executions.findAllForTarget(SHOP)).thenReturn(List.of(oldest, failed, newest));
+
+        mockMvc.perform(get("/api/v1/targets/{id}/backups", SHOP).param("limit", "1")
+                        .with(httpBasic("operator", PASSWORD)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].sizeBytes").value(2048));
+        mockMvc.perform(get("/api/v1/targets/{id}/backups", SHOP).param("status", "succeeded").param("limit", "2")
+                        .with(httpBasic("operator", PASSWORD)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[1].sizeBytes").value(1024));
+    }
+
+    @Test
+    void aLimitBelowOneIsA400() throws Exception {
+        when(targets.listAll()).thenReturn(List.of(shop()));
+
+        mockMvc.perform(get("/api/v1/targets/{id}/backups", SHOP).param("limit", "0")
+                        .with(httpBasic("operator", PASSWORD)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("limit must be 1 or more, not 0"));
+    }
+
     @Test
     void anUnknownTargetIsA404() throws Exception {
         when(targets.listAll()).thenReturn(List.of(shop()));
