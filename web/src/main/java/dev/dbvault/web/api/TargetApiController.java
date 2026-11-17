@@ -64,11 +64,9 @@ public class TargetApiController {
      */
     @GetMapping("/{id}/backups")
     List<BackupView> backups(@PathVariable UUID id, @RequestParam(required = false) String status,
-            @RequestParam(required = false) Integer limit) {
+            @RequestParam(name = "limit", required = false) String asked) {
         ExecutionStatus only = status == null ? null : parse(status);
-        if (limit != null && limit < 1) {
-            throw new BadParameterException("limit must be 1 or more, not " + limit);
-        }
+        Integer limit = asked == null ? null : limit(asked);
         if (targets.listAll().stream().noneMatch(target -> target.getId().equals(id))) {
             throw new NoSuchElementException("No target with id " + id);
         }
@@ -78,6 +76,23 @@ public class TargetApiController {
                 .limit(limit == null ? Long.MAX_VALUE : limit)
                 .map(BackupView::of)
                 .toList();
+    }
+
+    /**
+     * Read here rather than by the framework, so that a limit that is not a number answers in the
+     * API's own error shape like every other refused parameter.
+     */
+    private static int limit(String asked) {
+        int limit;
+        try {
+            limit = Integer.parseInt(asked.trim());
+        } catch (NumberFormatException notANumber) {
+            throw new BadParameterException("limit must be a whole number, not '" + asked + "'");
+        }
+        if (limit < 1) {
+            throw new BadParameterException("limit must be 1 or more, not " + limit);
+        }
+        return limit;
     }
 
     private static ExecutionStatus parse(String status) {
