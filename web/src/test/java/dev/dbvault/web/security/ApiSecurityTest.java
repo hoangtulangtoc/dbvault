@@ -218,6 +218,17 @@ class ApiSecurityTest {
                 .andExpect(jsonPath("$.error").value("limit must be 1 or more, not 0"));
     }
 
+    /** A script prints {@code .error}; the framework's own 400 has no such field. */
+    @Test
+    void aLimitThatIsNotANumberIsA400WithTheApisError() throws Exception {
+        when(targets.listAll()).thenReturn(List.of(shop()));
+
+        mockMvc.perform(get("/api/v1/targets/{id}/backups", SHOP).param("limit", "abc")
+                        .with(httpBasic("operator", PASSWORD)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("limit must be a whole number, not 'abc'"));
+    }
+
     @Test
     void anUnknownTargetIsA404() throws Exception {
         when(targets.listAll()).thenReturn(List.of(shop()));
