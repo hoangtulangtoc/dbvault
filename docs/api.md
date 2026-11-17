@@ -20,8 +20,12 @@ Restore verification must be enabled for the deployment; see
 
 ```sh
 curl -u admin https://dbvault.example.com/api/v1/targets
+curl -u admin "https://dbvault.example.com/api/v1/targets/<target-id>/backups?status=FAILED&limit=5"
 curl -u admin -X POST https://dbvault.example.com/api/v1/backups/<backup-id>/verifications
 ```
+
+The second line asks for a target's five most recent failed backups: `status` filters first,
+then `limit` keeps the newest of what is left.
 
 ## Previewing a retention policy
 
