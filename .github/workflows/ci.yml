@@ -70,8 +70,9 @@ jobs:
         run: mvn --batch-mode --no-transfer-progress verify
 
       # The log alone rarely says why an integration test failed; the reports go with the runner.
+      # A run that reaches timeout-minutes is cancelled, not failed, and needs them most.
       - name: Upload the test reports
-        if: failure()
+        if: ${{ !success() }}
         uses: actions/upload-artifact@v4
         with:
           name: test-reports
